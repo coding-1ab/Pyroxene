@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 rsa = "0.10.0-rc.11"
+sha256 = "1.6.0"
