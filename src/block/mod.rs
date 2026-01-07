@@ -4,3 +4,8 @@ pub mod transaction{
 
     }
 }
+pub mod blockchain{
+    pub struct Blockchain{
+        
+    }
+}
