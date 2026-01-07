@@ -8,3 +8,6 @@ rsa = "0.10.0-rc.11"
 sha256 = "1.6.0"
 socket2 = "0.5"
 rkyv = "0.8.13"
+
+[dev-dependencies]
+rand = "0.10.0-rc.6"

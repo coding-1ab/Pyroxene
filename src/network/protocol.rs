@@ -1,6 +1,8 @@
 
 use rkyv::{Archive, Deserialize, Serialize};
-use std::net::Ipv4Addr;
+
+// TODO properly implement this
+pub type WalletId = u128;
 
 #[derive(Archive, Deserialize, Serialize, Debug, PartialEq, Clone)]
 #[rkyv(
@@ -8,18 +10,18 @@ use std::net::Ipv4Addr;
     derive(Debug),
 )]
 pub struct Packet {
-    pub sender_ip: Ipv4Addr,
+    pub sender_id: WalletId,
 }
 
 impl Packet {
-    pub fn new(sender: Ipv4Addr) -> Self {
+    pub fn new(sender_id: u128) -> Self {
         Self {
-            sender_ip: sender,
+            sender_id
         }
     }
 
-    pub fn sender(&self) -> Ipv4Addr {
-        self.sender_ip.clone()
+    pub fn sender(&self) -> WalletId {
+        self.sender_id.clone()
     }
 }
 
@@ -27,17 +29,16 @@ impl Packet {
 mod tests {
     use super::*;
     use crate::network::UdpBroadcast;
-    use std::net::Ipv4Addr;
     use std::thread;
     use std::time::Duration;
 
     #[test]
     fn test_packet_broadcast() {
-        let node1 = UdpBroadcast::with_port(1201, 1201).unwrap();
-        let mut node2 = UdpBroadcast::with_port(1201, 1201).unwrap();
+        let node1 = UdpBroadcast::with_port(rand::random::<u128>(), 1201, 1201).unwrap();
+        let mut node2 = UdpBroadcast::with_port(rand::random::<u128>(), 1201, 1201).unwrap();
 
         // 보낼 패킷
-        let to_send = Packet::new(Ipv4Addr::new(192, 168, 0, 100));
+        let to_send = Packet::new(node1.id);
 
         let received = thread::scope(|scope| {
             let result = scope.spawn(|| {

@@ -1,4 +1,4 @@
-use crate::network::protocol::Packet;
+use crate::network::protocol::{Packet, WalletId};
 use rkyv::rancor::Error;
 use rkyv::{from_bytes, to_bytes};
 use socket2::{Domain, Protocol, Socket, Type};
@@ -10,17 +10,18 @@ mod protocol;
 pub const PORT: u16 = 1200;
 
 pub struct UdpBroadcast {
+    id: WalletId,
     buffer: Box<[u8; 1024]>,
     socket: UdpSocket,
     target: SocketAddr,
 }
 
 impl UdpBroadcast {
-    pub fn new() -> Result<Self> {
-        Self::with_port(PORT, PORT)
+    pub fn new(id: WalletId) -> Result<Self> {
+        Self::with_port(id, PORT, PORT)
     }
 
-    pub fn with_port(send: u16, receive: u16) -> Result<Self> {
+    pub fn with_port(id: WalletId, send: u16, receive: u16) -> Result<Self> {
         let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
         socket.set_broadcast(true)?;
         socket.set_reuse_address(true)?;
@@ -31,6 +32,7 @@ impl UdpBroadcast {
         let socket: UdpSocket = socket.into();
 
         Ok(Self {
+            id,
             buffer: unsafe { Box::new_zeroed().assume_init() },
             socket,
             target: ([255, 255, 255, 255], send).into(), // 브로드캐스트 주소 바꿀 것
@@ -42,13 +44,20 @@ impl UdpBroadcast {
     }
 
     pub fn recv(&mut self) -> Result<Packet> {
-        let (length, _) = self.socket.recv_from(self.buffer.as_mut_slice())?;
-        if length == self.buffer.len() {
-            panic!("Buffer Overflow");
-        }
+        loop {
+            let (length, _) = self.socket.recv_from(self.buffer.as_mut_slice())?;
+            if length == self.buffer.len() {
+                panic!("Buffer Overflow");
+            }
 
-        let contents = &self.buffer.as_slice()[..length];
-        Ok(from_bytes::<Packet, Error>(contents).unwrap())
+            let contents = &self.buffer.as_slice()[..length];
+            let packet = from_bytes::<Packet, Error>(contents).unwrap();
+            if packet.sender_id == self.id {
+                continue;
+            }
+
+            break Ok(packet)
+        }
     }
 
     pub fn is_self(&self, addr: SocketAddr) -> bool {
