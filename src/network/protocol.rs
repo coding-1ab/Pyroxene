@@ -8,29 +8,18 @@ use std::net::Ipv4Addr;
     derive(Debug),
 )]
 pub struct Packet {
-    pub sender_ip: [u8; 4],
+    pub sender_ip: Ipv4Addr,
 }
 
 impl Packet {
     pub fn new(sender: Ipv4Addr) -> Self {
         Self {
-            sender_ip: sender.octets(),
+            sender_ip: sender,
         }
     }
 
     pub fn sender(&self) -> Ipv4Addr {
-        Ipv4Addr::from(self.sender_ip)
-    }
-}
-
-impl ArchivedPacket {
-    pub fn sender(&self) -> Ipv4Addr {
-        Ipv4Addr::new(
-            self.sender_ip[0],
-            self.sender_ip[1],
-            self.sender_ip[2],
-            self.sender_ip[3],
-        )
+        self.sender_ip.clone()
     }
 }
 
@@ -41,6 +30,7 @@ mod tests {
     use std::net::Ipv4Addr;
     use std::thread;
     use std::time::Duration;
+    use rkyv::from_bytes;
 
     #[test]
     fn test_packet_broadcast() {
@@ -74,14 +64,8 @@ mod tests {
 
         let valid_data = &receive_buffer[..received_size];
 
-
-        let archived = rkyv::access::<ArchivedPacket, rkyv::rancor::Error>(valid_data).unwrap();
+        let archived = from_bytes::<Packet, rkyv::rancor::Error>(valid_data).unwrap();
 
         assert_eq!(archived.sender(), packet.sender());
-        assert_eq!(archived.sender(), Ipv4Addr::new(192, 168, 0, 100));
-
-        // 역직렬화
-        let deserialized: Packet = rkyv::deserialize::<Packet, rkyv::rancor::Error>(archived).unwrap();
-        assert_eq!(deserialized, packet);
     }
 }
