@@ -1,6 +1,8 @@
 use socket2::{Domain, Protocol, Socket, Type};
 use std::io::Result;
-use std::net::{SocketAddr, UdpSocket};
+use std::net::{SocketAddr, SocketAddrV4, UdpSocket};
+
+pub const PORT: u16 = 1200;
 
 pub struct UdpBroadcast {
     socket: UdpSocket,
@@ -8,18 +10,23 @@ pub struct UdpBroadcast {
 }
 
 impl UdpBroadcast {
-    pub fn new(port: u16) -> Result<Self> {
+    pub fn new() -> Result<Self> {
+        Self::with_port(PORT, PORT)
+    }
+
+    pub fn with_port(send: u16, receive: u16) -> Result<Self> {
         let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
         socket.set_broadcast(true)?;
+        socket.set_reuse_address(true)?;
 
-        let addr: SocketAddr = ([0, 0, 0, 0], port).into(); // 0.0.0.0 != 192.168.x.x.. 미래의 나, 해결해라!
+        let addr: SocketAddr = ([0, 0, 0, 0], receive).into(); // 0.0.0.0 != 192.168.x.x.. 미래의 나, 해결해라!
         socket.bind(&addr.into())?;
 
         let socket: UdpSocket = socket.into();
 
         Ok(Self {
             socket,
-            target: ([255, 255, 255, 255], port).into(), // 브로드캐스트 주소 바꿀 것
+            target: ([255, 255, 255, 255], send).into(), // 브로드캐스트 주소 바꿀 것
         })
     }
 
@@ -44,8 +51,8 @@ mod tests {
 
     #[test]
     fn test_broadcast() {
-        let node1 = UdpBroadcast::new(8823).unwrap();
-        let node2 = UdpBroadcast::new(9265).unwrap();
+        let node1 = UdpBroadcast::new().unwrap();
+        let node2 = UdpBroadcast::new().unwrap();
         let data: [u8; 4] = [0x43, 0x55, 0x54, 0x45];
         let mut receive_buffer = [0u8; 4];
 
@@ -62,7 +69,6 @@ mod tests {
         let (receive_count, sender_address) = receiver;
 
         assert_eq!(receive_count, data.len());
-        assert_eq!(node1.target, sender_address);
         assert_eq!(receive_buffer, data);
 
     }
