@@ -2,6 +2,8 @@ use socket2::{Domain, Protocol, Socket, Type};
 use std::io::Result;
 use std::net::{SocketAddr, SocketAddrV4, UdpSocket};
 
+mod protocol;
+
 pub const PORT: u16 = 1200;
 
 pub struct UdpBroadcast {
