@@ -27,6 +27,11 @@ impl UdpBroadcast {
         let socket: UdpSocket = socket.into();
 
         Ok(Self {
+<<<<<<< HEAD
+=======
+            id,
+            buffer: Box::new([0u8; 1024]),
+>>>>>>> 379a7f9 (fix: Initialize buffer with Box::new instead of unsafe method)
             socket,
             target: ([255, 255, 255, 255], send).into(), // 브로드캐스트 주소 바꿀 것
         })
