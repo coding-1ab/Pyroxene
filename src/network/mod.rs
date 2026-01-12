@@ -33,7 +33,7 @@ impl UdpBroadcast {
 
         Ok(Self {
             id,
-            buffer: unsafe { Box::new_zeroed().assume_init() },
+            buffer: Box::new([0u8; 1024]),
             socket,
             target: ([255, 255, 255, 255], send).into(), // 브로드캐스트 주소 바꿀 것
         })
