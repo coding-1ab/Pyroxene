@@ -1,8 +1,8 @@
 use socket2::{Domain, Protocol, Socket, Type};
-use std::collections::HashSet;
 use std::io::Result;
-use std::net::{SocketAddr, SocketAddrV4, UdpSocket};
+use std::net::{SocketAddr, UdpSocket};
 use std::sync::{Arc, Mutex};
+use crate::block::block::Block;
 
 mod protocol;
 
@@ -11,7 +11,7 @@ pub const PORT: u16 = 1200;
 pub struct UdpBroadcast {
     socket: UdpSocket,
     target: SocketAddr,
-    known_data: Arc<Mutex<HashSet<Vec<u8>>>>,
+    known_data: Arc<Mutex<Vec<Block>>>,
 }
 
 impl UdpBroadcast {
@@ -32,7 +32,7 @@ impl UdpBroadcast {
         Ok(Self {
             socket,
             target: ([255, 255, 255, 255], send).into(), // 브로드캐스트 주소 바꿀 것
-            known_data: Arc::new(Mutex::new(HashSet::new())),
+            known_data: Arc::new(Mutex::new(Vec::new())),
         })
     }
 
@@ -48,12 +48,16 @@ impl UdpBroadcast {
         addr == self.target
     }
 
-    pub fn is_known(&self, data: &[u8]) -> bool {
-        self.known_data.lock().unwrap().contains(data)
+    pub fn is_known(&self, block: &Block) -> bool {
+        self.known_data
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|b| b.block_header.id == block.block_header.id)
     }
 
-    pub fn mark_known(&self, data: &[u8]) {
-        self.known_data.lock().unwrap().insert(data.to_vec());
+    pub fn mark_known(&self, block: Block) {
+        self.known_data.lock().unwrap().push(block);
     }
 
     pub fn receive_and_rebroadcast(&self) -> Result<()> {
