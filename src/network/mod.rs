@@ -1,6 +1,8 @@
 use socket2::{Domain, Protocol, Socket, Type};
+use std::collections::HashSet;
 use std::io::Result;
 use std::net::{SocketAddr, SocketAddrV4, UdpSocket};
+use std::sync::{Arc, Mutex};
 
 mod protocol;
 
@@ -9,6 +11,7 @@ pub const PORT: u16 = 1200;
 pub struct UdpBroadcast {
     socket: UdpSocket,
     target: SocketAddr,
+    known_data: Arc<Mutex<HashSet<Vec<u8>>>>,
 }
 
 impl UdpBroadcast {
@@ -29,6 +32,7 @@ impl UdpBroadcast {
         Ok(Self {
             socket,
             target: ([255, 255, 255, 255], send).into(), // 브로드캐스트 주소 바꿀 것
+            known_data: Arc::new(Mutex::new(HashSet::new())),
         })
     }
 
@@ -42,6 +46,28 @@ impl UdpBroadcast {
 
     pub fn is_self(&self, addr: SocketAddr) -> bool {
         addr == self.target
+    }
+
+    pub fn is_known(&self, data: &[u8]) -> bool {
+        self.known_data.lock().unwrap().contains(data)
+    }
+
+    pub fn mark_known(&self, data: &[u8]) {
+        self.known_data.lock().unwrap().insert(data.to_vec());
+    }
+
+    pub fn receive_and_rebroadcast(&self) -> Result<()> {
+        let mut buffer = vec![0u8; 65536];
+        let (size, _addr) = self.recv(&mut buffer)?;
+        let received_data = &buffer[..size];
+
+        if self.is_known(received_data) { // 이미본거야 콘
+            return Ok(());
+        }
+
+        self.mark_known(received_data);
+        self.send(received_data)?;
+        Ok(())
     }
 }
 
@@ -72,7 +98,5 @@ mod tests {
 
         assert_eq!(receive_count, data.len());
         assert_eq!(receive_buffer, data);
-
     }
-
 }
