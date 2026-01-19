@@ -48,10 +48,7 @@ pub fn hash_block(block: &Block) -> [u8; 32] {
         .expect("Failed to serial");
 
     let hash = Sha256::digest(&bytes);
-
-    let mut result = [0u8; 32];
-    result.copy_from_slice(&hash);
-    result
+    hash.into()
 }
 
 pub fn verify_chain_link(
