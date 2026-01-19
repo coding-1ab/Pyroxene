@@ -6,7 +6,26 @@ use rsa::pkcs8::{LineEnding};
 use rsa::pss::{Signature, SigningKey, VerifyingKey};
 use rsa::signature::{RandomizedSigner, Verifier};
 use rsa::RsaPrivateKey;
-use sha2::Sha256;
+use sha2::{Digest, Sha256};
+use rkyv::{Archive, Serialize, Deserialize, to_bytes, rancor::Error};
+
+#[derive(Archive, Serialize, Deserialize, Debug)]
+pub struct Transaction {
+    pub amount: u64,
+}
+
+#[derive(Archive, Serialize, Deserialize, Debug)]
+pub struct BlockHeader {
+    pub prev_hash: [u8; 32],
+    pub nonce: u64,
+    pub merkle_root: [u8; 32],
+}
+
+#[derive(Archive, Serialize, Deserialize, Debug)]
+pub struct Block {
+    pub block_header: BlockHeader,
+    pub txs: Vec<Transaction>,
+}
 
 pub fn generate_keys() -> RsaPrivateKey {
     let private_key = RsaPrivateKey::new(
@@ -29,12 +48,30 @@ pub fn load_keys(path: &str) -> RsaPrivateKey {
 }
 
 pub fn sign_data(data: &[u8], key: &SigningKey<Sha256>) -> Signature {
-    let signed_message = key.sign_with_rng(&mut rand::rng(), data);
-    signed_message
+    key.sign_with_rng(&mut rand::rng(), data)
 }
 
-pub fn verify_data(data: &[u8], signature: &Signature, key: VerifyingKey<Sha256>) {
-    key.verify(data, signature).expect("Verification failed");
+pub fn verify_data(data: &[u8], signature: &Signature, key: VerifyingKey<Sha256>) -> bool {
+    key.verify(data, signature).is_ok()
+}
+
+pub fn hash_block(block: &Block) -> [u8; 32] {
+    let bytes = to_bytes::<Error>(block)
+        .expect("Failed to serial");
+
+    let hash = Sha256::digest(&bytes);
+
+    let mut result = [0u8; 32];
+    result.copy_from_slice(&hash);
+    result
+}
+
+pub fn verify_chain_link(
+    received: &Block,
+    local_tip: &Block,
+) -> bool {
+    let local_tip_hash = hash_block(local_tip);
+    received.block_header.prev_hash == local_tip_hash
 }
 
 #[cfg(test)]

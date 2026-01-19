@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 rsa = "0.10.0-rc.11"
-sha2 = "0.10.9"
+sha2 = "0.11.0-rc.3"
 socket2 = "0.5"
 rkyv = "0.8.13"
 rand = "0.10.0-rc.6"
