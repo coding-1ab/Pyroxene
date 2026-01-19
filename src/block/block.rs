@@ -1,11 +1,15 @@
+use rkyv::{Archive, Deserialize, Serialize};
 use crate::block::transaction::Transaction;
 
+#[derive(Archive, Serialize, Deserialize, Debug)]
 pub struct BlockHeader {
-    prev_hash: [u8; 32],
-    nonce: u64,
-    merkle_root: [u8; 32]
+    pub prev_hash: [u8; 32],
+    pub nonce: u64,
+    pub merkle_root: [u8; 32],
 }
-pub struct Block{
-    block_header: BlockHeader,
-    txs: Vec<Transaction>
+
+#[derive(Archive, Serialize, Deserialize, Debug)]
+pub struct Block {
+    pub block_header: BlockHeader,
+    pub txs: Vec<crate::verify::Transaction>,
 }

@@ -8,23 +8,11 @@ use rsa::signature::{RandomizedSigner, Verifier};
 use rsa::RsaPrivateKey;
 use sha2::{Digest, Sha256};
 use rkyv::{Archive, Serialize, Deserialize, to_bytes, rancor::Error};
+use crate::block::block::Block;
 
 #[derive(Archive, Serialize, Deserialize, Debug)]
 pub struct Transaction {
     pub amount: u64,
-}
-
-#[derive(Archive, Serialize, Deserialize, Debug)]
-pub struct BlockHeader {
-    pub prev_hash: [u8; 32],
-    pub nonce: u64,
-    pub merkle_root: [u8; 32],
-}
-
-#[derive(Archive, Serialize, Deserialize, Debug)]
-pub struct Block {
-    pub block_header: BlockHeader,
-    pub txs: Vec<Transaction>,
 }
 
 pub fn generate_keys() -> RsaPrivateKey {
