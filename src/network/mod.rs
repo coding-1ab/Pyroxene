@@ -1,7 +1,9 @@
 use socket2::{Domain, Protocol, Socket, Type};
 use std::io::Result;
 use std::net::{SocketAddr, UdpSocket};
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex};
+use rkyv::from_bytes;
+use rkyv::rancor::Error as RkyvError;
 use crate::block::block::Block;
 
 mod protocol;
@@ -11,7 +13,7 @@ pub const PORT: u16 = 1200;
 pub struct UdpBroadcast {
     socket: UdpSocket,
     target: SocketAddr,
-    known_data: Arc<Mutex<Vec<Block>>>,
+    chain: Arc<Mutex<Vec<Block>>>,
 }
 
 impl UdpBroadcast {
@@ -32,7 +34,7 @@ impl UdpBroadcast {
         Ok(Self {
             socket,
             target: ([255, 255, 255, 255], send).into(), // 브로드캐스트 주소 바꿀 것
-            known_data: Arc::new(Mutex::new(Vec::new())),
+            chain: Arc::new(Mutex::new(Vec::new())),
         })
     }
 
@@ -49,27 +51,28 @@ impl UdpBroadcast {
     }
 
     pub fn is_known(&self, block: &Block) -> bool {
-        self.known_data
+        self.chain
             .lock()
             .unwrap()
-            .iter()
-            .any(|b| b.block_header.id == block.block_header.id)
+            .get(block.block_header.id as usize)
+            .is_some()
     }
 
     pub fn mark_known(&self, block: Block) {
-        self.known_data.lock().unwrap().push(block);
+        self.chain.lock().unwrap().push(block);
     }
 
     pub fn receive_and_rebroadcast(&self) -> Result<()> {
         let mut buffer = vec![0u8; 65536];
         let (size, _addr) = self.recv(&mut buffer)?;
         let received_data = &buffer[..size];
+        let block: Block = from_bytes::<Block, RkyvError>(received_data).unwrap();
 
-        if self.is_known(received_data) { // 이미본거야 콘
+        if self.is_known(&block) { // 이미본거야 콘
             return Ok(());
         }
 
-        self.mark_known(received_data);
+        self.mark_known(block);
         self.send(received_data)?;
         Ok(())
     }
@@ -90,10 +93,14 @@ mod tests {
 
         let receiver = thread::scope(|scope| {
             let result = scope.spawn(|| {
-                thread::sleep(Duration::from_secs(1));
-                node2.recv(&mut receive_buffer).unwrap()
+                println!("Receiving..");
+                let result = node2.recv(&mut receive_buffer).unwrap();
+                println!("Received");
+                result
             });
             scope.spawn(|| {
+                thread::sleep(Duration::from_secs(1));
+                println!("Sending");
                 node1.send(&data).unwrap();
             });
             result.join().unwrap()
@@ -102,5 +109,23 @@ mod tests {
 
         assert_eq!(receive_count, data.len());
         assert_eq!(receive_buffer, data);
+    }
+
+    const DATA: [u8; 4] = [1, 2, 3, 4];
+
+    #[test]
+    fn send() {
+        let node = UdpBroadcast::new().unwrap();
+        node.send(&DATA).unwrap();
+    }
+
+    #[test]
+    fn receive() {
+        let node = UdpBroadcast::new().unwrap();
+        let mut buffer = [0u8; 64];
+        let (length, sender) = node.recv(&mut buffer).unwrap();
+        let received = &buffer[..length];
+
+        println!("Received: {:?} from {}", received, sender);
     }
 }
