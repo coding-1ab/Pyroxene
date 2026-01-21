@@ -1,11 +1,11 @@
 use crate::block::block::Block;
-use rkyv::{from_bytes, to_bytes};
 use rkyv::rancor::Error as RkyvError;
+use rkyv::{from_bytes, to_bytes};
 use socket2::{Domain, Protocol, Socket, Type};
 use std::io::Result;
 use std::net::{SocketAddr, UdpSocket};
 use std::sync::mpsc::{Receiver, Sender};
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 mod protocol;
@@ -15,7 +15,7 @@ pub const PORT: u16 = 1200;
 pub struct UdpBroadcast {
     socket: UdpSocket,
     target: SocketAddr,
-    chain: Arc<Mutex<Vec<Block>>>,
+    pub chain: Arc<Mutex<Vec<Block>>>,
 }
 
 impl UdpBroadcast {

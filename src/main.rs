@@ -1,33 +1,21 @@
 pub mod network;
-pub mod verify;
+pub mod cutekoi;
 pub mod block;
 
-use std::sync::{Arc, Mutex};
-use std::sync::mpsc::channel;
-use std::thread;
+use crate::cutekoi::spawn_miner;
 use block::block::Block;
-use verify::{Transaction, mine};
+use cutekoi::Transaction;
 use network::UdpBroadcast;
+use std::sync::mpsc::channel;
 
 fn main() {
     let (block_sender, block_receiver) = channel::<Block>();
     let (cancel_sender, cancel_receiver) = channel::<()>();
-    let chain = Arc::new(Mutex::new(Vec::<Block>::new()));
     let transactions = Vec::<Transaction>::new();
     let zero_length = 4;
 
     let network = UdpBroadcast::new().unwrap();
 
-    thread::scope(|scope| {
-        let chain_clone = chain.clone();
-        scope.spawn(move || {
-            loop {
-                if let Some(block) = mine(&transactions, chain_clone.clone(), &cancel_receiver, zero_length) {
-                    block_sender.send(block).unwrap();
-                }
-            }
-        });
-
-        network.start(block_receiver, cancel_sender);
-    });
+    spawn_miner(block_sender, network.chain.clone(), cancel_receiver, transactions, zero_length);
+    network.start(block_receiver, cancel_sender);
 }

@@ -1,4 +1,3 @@
-
 use rkyv::{Archive, Deserialize, Serialize};
 use std::net::Ipv4Addr;
 

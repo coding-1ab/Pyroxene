@@ -1,14 +1,14 @@
-use std::sync::{Arc, Mutex};
+use crate::block::block::{Block, BlockHeader};
+use rkyv::{rancor::Error, to_bytes, Archive, Deserialize, Serialize};
 use rsa::pkcs8::{DecodePrivateKey, EncodePrivateKey};
-use rsa::pkcs8::{LineEnding};
+use rsa::pkcs8::LineEnding;
 use rsa::pss::{Signature, SigningKey, VerifyingKey};
 use rsa::signature::{RandomizedSigner, Verifier};
 use rsa::RsaPrivateKey;
 use sha2::{Digest, Sha256};
-use rkyv::{Archive, Serialize, Deserialize, to_bytes, rancor::Error};
-use crate::block::block::{Block, BlockHeader};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{Receiver, TryRecvError};
+use std::sync::mpsc::{Receiver, Sender};
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
 pub struct Transaction {
@@ -137,6 +137,28 @@ pub fn mine(
     }
 }
 
+pub fn spawn_miner(
+    block_tx: Sender<Block>,
+    chain: Arc<Mutex<Vec<Block>>>,
+    cancel_rx: Receiver<()>,
+    transactions: Vec<Transaction>,
+    zero_length: usize
+) {
+        thread::spawn(move || {
+        loop{
+            if let Some(block) = mine(
+                &transactions,
+                chain.clone(),
+                &cancel_rx,
+                zero_length,
+            ) {
+                let _ = block_tx.send(block);
+                break;
+            }
+        }
+    });
+}
+
 fn count_leading_zeros(bytes: [u8; 32]) -> u32 {
     let mut count = 0u32;
     for &b in &bytes {
@@ -151,7 +173,7 @@ fn count_leading_zeros(bytes: [u8; 32]) -> u32 {
 
 #[cfg(test)]
 mod test {
-    use crate::verify::{generate_keys, sign_data, verify_data};
+    use crate::cutekoi::{generate_keys, sign_data, verify_data};
     use rsa::pss::{SigningKey, VerifyingKey};
 
     #[test]
