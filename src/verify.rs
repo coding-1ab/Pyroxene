@@ -1,6 +1,3 @@
-/// 비밀키 공개키 받아서 저장을 하고 어떤 파일을 사인하고 검증하기
-///
-
 use rsa::pkcs8::{DecodePrivateKey, EncodePrivateKey};
 use rsa::pkcs8::{LineEnding};
 use rsa::pss::{Signature, SigningKey, VerifyingKey};
@@ -57,6 +54,71 @@ pub fn verify_chain_link(
 ) -> bool {
     let local_tip_hash = hash_block(local_tip);
     received.block_header.prev_hash == local_tip_hash
+}
+
+
+fn sha256(data: &[u8]) -> [u8; 32] {
+    let mut h = [0u8; 32];
+    h.copy_from_slice(&Sha256::digest(data));
+    h
+}
+
+fn merkle_root(txs: &[Transaction]) -> [u8; 32] {
+    if txs.is_empty() {
+        return [0u8; 32];
+    }
+
+    let mut level: Vec<[u8; 32]> = txs
+        .iter()
+        .map(|tx| {
+            let bytes = to_bytes::<Error>(tx).unwrap();
+            sha256(&bytes)
+        })
+    .collect();
+
+    while level.len() > 1 {
+        let mut next = Vec::new();
+
+        for pair in level.chunks(2){
+            let left = pair[0];
+            let right = if pair.len() == 2 { pair[1] } else { pair[0] };
+
+            let mut data = Vec::with_capacity(left.len() + right.len() + 1);
+            data.extend_from_slice(&left);
+            data.extend_from_slice(&right);
+
+            next.push(sha256(&data));
+        }
+
+        level = next;
+    }
+
+    level[0]
+}
+
+pub fn mine(transactions: Vec<Transaction>, zero_length: usize) -> Block {
+    let prev_hash = [0u8; 32];
+    let merkle_root = merkle_root(&transactions);
+    let mut nonce = 0u64;
+
+    loop {
+        let block = Block {
+            block_header: BlockHeader {
+                prev_hash,
+                nonce,
+                merkle_root
+            },
+            txs: transactions.clone(),
+        };
+
+        let hash = hash_block(&block);
+
+        if hash.iter().take(zero_length).all(|&b| b == 0) {
+            return block;
+        }
+
+        nonce += 1;
+    }
 }
 
 #[cfg(test)]
