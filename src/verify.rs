@@ -5,7 +5,7 @@ use rsa::signature::{RandomizedSigner, Verifier};
 use rsa::RsaPrivateKey;
 use sha2::{Digest, Sha256};
 use rkyv::{Archive, Serialize, Deserialize, to_bytes, rancor::Error};
-use crate::block::block::Block;
+use crate::block::block::{Block, BlockHeader};
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
 pub struct Transaction {
@@ -100,11 +100,13 @@ pub fn mine(transactions: Vec<Transaction>, zero_length: usize) -> Block {
     let prev_hash = [0u8; 32];
     let merkle_root = merkle_root(&transactions);
     let mut nonce = 0u64;
+    let id = transactions.len() as u64;
 
     loop {
         let block = Block {
             block_header: BlockHeader {
                 prev_hash,
+                id,
                 nonce,
                 merkle_root
             },
@@ -113,12 +115,24 @@ pub fn mine(transactions: Vec<Transaction>, zero_length: usize) -> Block {
 
         let hash = hash_block(&block);
 
-        if hash.iter().take(zero_length).all(|&b| b == 0) {
+        if count_leading_zeros(hash) as usize == zero_length {
             return block;
         }
 
         nonce += 1;
     }
+}
+
+fn count_leading_zeros(bytes: [u8; 32]) -> u32 {
+    let mut count = 0u32;
+    for &b in &bytes {
+        count += b.leading_zeros();
+
+        if b != 0 {
+            break;
+        }
+    }
+    count
 }
 
 #[cfg(test)]
