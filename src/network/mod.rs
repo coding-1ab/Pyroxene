@@ -1,10 +1,12 @@
+use crate::block::block::Block;
+use rkyv::{from_bytes, to_bytes};
+use rkyv::rancor::Error as RkyvError;
 use socket2::{Domain, Protocol, Socket, Type};
 use std::io::Result;
 use std::net::{SocketAddr, UdpSocket};
-use std::sync::{mpsc, Arc, Mutex};
-use rkyv::from_bytes;
-use rkyv::rancor::Error as RkyvError;
-use crate::block::block::Block;
+use std::sync::mpsc::{Receiver, Sender};
+use std::sync::{Arc, Mutex, mpsc};
+use std::thread;
 
 mod protocol;
 
@@ -38,6 +40,34 @@ impl UdpBroadcast {
         })
     }
 
+    pub fn start(self, receive_block: Receiver<Block>, notify_block: Sender<()>) {
+        thread::scope(|scope| {
+            let receive_block = receive_block;
+            scope.spawn(|| {
+                let receive_block = receive_block;
+                let chain = self.chain.clone();
+                loop {
+                    let new_block = receive_block.recv().unwrap();
+                    let bytes = to_bytes::<RkyvError>(&new_block).unwrap();
+                    chain.lock().unwrap().push(new_block);
+                    self.send(bytes.as_slice()).unwrap();
+                }
+            });
+            scope.spawn(|| {
+                let mut buffer = Box::new([0u8; 4096]);
+                let chain = self.chain.clone();
+                loop {
+                    let (length, source) = self.recv(buffer.as_mut_slice()).unwrap();
+                    println!("Received new block from source: {}", source);
+                    let data = &buffer.as_slice()[..length];
+                    let new_block: Block = from_bytes::<Block, RkyvError>(data).unwrap();
+                    chain.lock().unwrap().push(new_block);
+                    notify_block.send(()).unwrap();
+                }
+            });
+        });
+    }
+
     pub fn send(&self, data: &[u8]) -> Result<usize> {
         self.socket.send_to(data, self.target)
     }
@@ -68,7 +98,8 @@ impl UdpBroadcast {
         let received_data = &buffer[..size];
         let block: Block = from_bytes::<Block, RkyvError>(received_data).unwrap();
 
-        if self.is_known(&block) { // 이미본거야 콘
+        if self.is_known(&block) {
+            // 이미본거야 콘
             return Ok(());
         }
 
@@ -80,9 +111,9 @@ impl UdpBroadcast {
 
 #[cfg(test)]
 mod tests {
+    use crate::network::UdpBroadcast;
     use std::thread;
     use std::time::Duration;
-    use crate::network::UdpBroadcast;
 
     #[test]
     fn test_broadcast() {
