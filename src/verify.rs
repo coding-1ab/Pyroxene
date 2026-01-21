@@ -10,14 +10,14 @@ use sha2::{Digest, Sha256};
 use rkyv::{Archive, Serialize, Deserialize, to_bytes, rancor::Error};
 use crate::block::block::Block;
 
-#[derive(Archive, Serialize, Deserialize, Debug)]
+#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
 pub struct Transaction {
     pub amount: u64,
 }
 
 pub fn generate_keys() -> RsaPrivateKey {
     let private_key = RsaPrivateKey::new(
-        &mut rand::rng(),
+        &mut rand::thread_rng(),
         2048
     ).expect("Failed to generate a private key");
 
@@ -36,7 +36,7 @@ pub fn load_keys(path: &str) -> RsaPrivateKey {
 }
 
 pub fn sign_data(data: &[u8], key: &SigningKey<Sha256>) -> Signature {
-    key.sign_with_rng(&mut rand::rng(), data)
+    key.sign_with_rng(&mut rand::thread_rng(), data)
 }
 
 pub fn verify_data(data: &[u8], signature: &Signature, key: VerifyingKey<Sha256>) -> bool {
