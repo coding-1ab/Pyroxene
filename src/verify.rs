@@ -8,6 +8,7 @@ use sha2::{Digest, Sha256};
 use rkyv::{Archive, Serialize, Deserialize, to_bytes, rancor::Error};
 use crate::block::block::{Block, BlockHeader};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{Receiver, TryRecvError};
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
 pub struct Transaction {
@@ -98,27 +99,12 @@ fn merkle_root(txs: &[Transaction]) -> [u8; 32] {
     level[0]
 }
 
-pub struct MineControl{
-    stop: AtomicBool,
-}
-
-impl MineControl {
-    pub fn new() -> Self{
-        Self {
-            stop: AtomicBool::new(false),
-        }
-    }
-
-    pub fn stop(&self) {
-        self.stop.store(true, Ordering::Relaxed);
-    }
-
-    pub fn should_stop(&self) -> bool {
-        self.stop.load(Ordering::Relaxed)
-    }
-}
-
-pub fn mine(transactions: Vec<Transaction>, chain: Arc<Mutex<Vec<Block>>>, control: &MineControl, zero_length: usize) -> Option<Block> {
+pub fn mine(
+    transactions: &Vec<Transaction>,
+    chain: Arc<Mutex<Vec<Block>>>,
+    control: &Receiver<()>,
+    zero_length: usize
+) -> Option<Block> {
     let prev_hash = [0u8; 32];
     let merkle_root = merkle_root(&transactions);
     let mut nonce = 0u64;
@@ -128,7 +114,7 @@ pub fn mine(transactions: Vec<Transaction>, chain: Arc<Mutex<Vec<Block>>>, contr
     drop(chain_access);
 
     loop {
-        if control.should_stop() {
+        if let Ok(_) = control.try_recv() {
             return None;
         }
         let block = Block {
@@ -164,7 +150,7 @@ fn count_leading_zeros(bytes: [u8; 32]) -> u32 {
 }
 
 #[cfg(test)]
-mod test { f
+mod test {
     use crate::verify::{generate_keys, sign_data, verify_data};
     use rsa::pss::{SigningKey, VerifyingKey};
 
