@@ -1,25 +1,25 @@
 use crate::block::block::{Block, BlockHeader};
-use rkyv::{rancor::Error, to_bytes, Archive, Deserialize, Serialize};
-use rsa::pkcs8::{DecodePrivateKey, EncodePrivateKey};
+use rkyv::{Archive, Deserialize, Serialize, rancor::Error, to_bytes};
+use rsa::RsaPrivateKey;
 use rsa::pkcs8::LineEnding;
+use rsa::pkcs8::{DecodePrivateKey, EncodePrivateKey};
 use rsa::pss::{Signature, SigningKey, VerifyingKey};
 use rsa::signature::{RandomizedSigner, Verifier};
-use rsa::RsaPrivateKey;
 use sha2::{Digest, Sha256};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Duration;
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
 pub struct Transaction {
+    pub sender: usize, // temporary value.
     pub amount: u64,
 }
 
 pub fn generate_keys() -> RsaPrivateKey {
-    let private_key = RsaPrivateKey::new(
-        &mut rand::thread_rng(),
-        2048
-    ).expect("Failed to generate a private key");
+    let private_key = RsaPrivateKey::new(&mut rand::thread_rng(), 2048)
+        .expect("Failed to generate a private key");
 
     private_key
 }
@@ -44,21 +44,16 @@ pub fn verify_data(data: &[u8], signature: &Signature, key: VerifyingKey<Sha256>
 }
 
 pub fn hash_block(block: &Block) -> [u8; 32] {
-    let bytes = to_bytes::<Error>(block)
-        .expect("Failed to serial");
+    let bytes = to_bytes::<Error>(block).expect("Failed to serial");
 
     let hash = Sha256::digest(&bytes);
     hash.into()
 }
 
-pub fn verify_chain_link(
-    received: &Block,
-    local_tip: &Block,
-) -> bool {
+pub fn verify_chain_link(received: &Block, local_tip: &Block) -> bool {
     let local_tip_hash = hash_block(local_tip);
     received.block_header.prev_hash == local_tip_hash
 }
-
 
 fn sha256(data: &[u8]) -> [u8; 32] {
     let mut h = [0u8; 32];
@@ -77,12 +72,12 @@ fn merkle_root(txs: &[Transaction]) -> [u8; 32] {
             let bytes = to_bytes::<Error>(tx).unwrap();
             sha256(&bytes)
         })
-    .collect();
+        .collect();
 
     while level.len() > 1 {
         let mut next = Vec::new();
 
-        for pair in level.chunks(2){
+        for pair in level.chunks(2) {
             let left = pair[0];
             let right = if pair.len() == 2 { pair[1] } else { pair[0] };
 
@@ -103,37 +98,38 @@ pub fn mine(
     transactions: &Vec<Transaction>,
     chain: Arc<Mutex<Vec<Block>>>,
     control: &Receiver<()>,
-    zero_length: usize
+    zero_length: usize,
 ) -> Option<Block> {
-    let prev_hash = [0u8; 32];
-    let merkle_root = merkle_root(&transactions);
-    let mut nonce = 0u64;
-
     let chain_access = chain.lock().unwrap();
+    let prev_hash = chain_access.last().map(hash_block).unwrap_or([0u8; 32]);
+    let merkle_root = merkle_root(&transactions);
     let id = chain_access.len() as u64;
     drop(chain_access);
 
+    let mut block = Block {
+        block_header: BlockHeader {
+            prev_hash,
+            id,
+            nonce: 0u64,
+            merkle_root,
+        },
+        txs: transactions.clone(),
+    };
+
     loop {
+        thread::sleep(Duration::from_millis(4));
         if let Ok(_) = control.try_recv() {
+            println!("Cancelling Mining");
             return None;
         }
-        let block = Block {
-            block_header: BlockHeader {
-                prev_hash,
-                id,
-                nonce,
-                merkle_root
-            },
-            txs: transactions.clone(),
-        };
+
+        block.block_header.nonce += 1;
 
         let hash = hash_block(&block);
 
         if count_leading_zeros(hash) as usize == zero_length {
             return Some(block);
         }
-
-        nonce += 1;
     }
 }
 
@@ -141,19 +137,16 @@ pub fn spawn_miner(
     block_tx: Sender<Block>,
     chain: Arc<Mutex<Vec<Block>>>,
     cancel_rx: Receiver<()>,
-    transactions: Vec<Transaction>,
-    zero_length: usize
+    transactions: Receiver<Vec<Transaction>>,
+    zero_length: usize,
 ) {
-        thread::spawn(move || {
-        loop{
-            if let Some(block) = mine(
-                &transactions,
-                chain.clone(),
-                &cancel_rx,
-                zero_length,
-            ) {
-                let _ = block_tx.send(block);
-                break;
+    thread::spawn(move || {
+        loop {
+            let to_send = transactions.recv().unwrap();
+            loop {
+                if let Some(block) = mine(&to_send, chain.clone(), &cancel_rx, zero_length) {
+                    block_tx.send(block).unwrap();
+                }
             }
         }
     });

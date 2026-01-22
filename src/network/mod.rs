@@ -40,31 +40,44 @@ impl UdpBroadcast {
         })
     }
 
-    pub fn start(self, receive_block: Receiver<Block>, notify_block: Sender<()>) {
-        thread::scope(|scope| {
-            let receive_block = receive_block;
-            scope.spawn(|| {
-                let receive_block = receive_block;
-                let chain = self.chain.clone();
-                loop {
-                    let new_block = receive_block.recv().unwrap();
-                    let bytes = to_bytes::<RkyvError>(&new_block).unwrap();
-                    chain.lock().unwrap().push(new_block);
-                    self.send(bytes.as_slice()).unwrap();
-                }
-            });
-            scope.spawn(|| {
-                let mut buffer = Box::new([0u8; 4096]);
-                let chain = self.chain.clone();
-                loop {
-                    let (length, source) = self.recv(buffer.as_mut_slice()).unwrap();
-                    println!("Received new block from source: {}", source);
-                    let data = &buffer.as_slice()[..length];
-                    let new_block: Block = from_bytes::<Block, RkyvError>(data).unwrap();
-                    chain.lock().unwrap().push(new_block);
-                    notify_block.send(()).unwrap();
-                }
-            });
+    pub fn spawn(self, receive_block: Receiver<Block>, notify_block: Sender<()>) {
+        thread::spawn(move || {
+            thread::scope(|scope| {
+                scope.spawn(|| {
+                    let receive_block = receive_block;
+                    let chain = self.chain.clone();
+                    loop {
+                        let new_block = receive_block.recv().unwrap();
+                        let bytes = to_bytes::<RkyvError>(&new_block).unwrap();
+                        let mut chain_access = chain.lock().unwrap();
+                        chain_access.push(new_block);
+                        println!("Sent new block");
+                        println!("Chain: {}", chain_access.len());
+                        drop(chain_access);
+                        self.send(bytes.as_slice()).unwrap();
+                    }
+                });
+
+                scope.spawn(|| {
+                    let notify_block = notify_block;
+                    let mut buffer = Box::new([0u8; 4096]);
+                    let chain = self.chain.clone();
+                    loop {
+                        let (length, source) = self.recv(buffer.as_mut_slice()).unwrap();
+                        let data = &buffer.as_slice()[..length];
+                        let new_block: Block = from_bytes::<Block, RkyvError>(data).unwrap();
+                        let mut chain_access = chain.lock().unwrap();
+                        if chain_access.len() == new_block.block_header.id as usize {
+                            chain_access.push(new_block);
+                            println!("Received new block from source: {}", source);
+                            println!("Chain: {}", chain_access.len());
+
+                            notify_block.send(()).unwrap();
+                        }
+                        drop(chain_access);
+                    }
+                });
+            })
         });
     }
 
