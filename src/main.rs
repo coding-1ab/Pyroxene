@@ -1,6 +1,7 @@
 pub mod network;
 pub mod cutekoi;
 pub mod block;
+pub mod database;
 
 use crate::cutekoi::{spawn_miner, Transaction};
 use block::block::Block;
