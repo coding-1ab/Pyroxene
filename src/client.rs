@@ -3,14 +3,17 @@ use crate::network::UdpBroadcast;
 use crate::block::block::Block;
 
 use rand::random;
-use std::sync::mpsc::channel;
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread::JoinHandle;
 
 pub struct Client{
     pub id: usize,
     pub network: UdpBroadcast,
-    pub miner_handle: JoinHandle<()>,
-    pub network_handle: JoinHandle<()>,
+    pub data_sender: Sender<Vec<Transaction>>,
+    data_receiver: Option<Receiver<Vec<Transaction>>>,
+    block_receiver: Option<Receiver<Block>>,
+    cancel_sender: Option<Sender<()>>,
+    cancel_receiver: Option<Receiver<()>>,
 }
 
 impl Client{
@@ -26,7 +29,42 @@ impl Client{
 
         let network = UdpBroadcast::new().unwrap();
 
-        let miner_handle = spawn_miner(block_sender, network.chain.clone(), cancel_receiver, data_receiver, zero_length);
-        let network_handle = network.spawn(block_receiver, cancel_sender);
+        let mut client = Self {
+            id,
+            network,
+            data_sender,
+            data_receiver: Some(data_receiver),
+            block_receiver: Some(block_receiver),
+            cancel_sender: Some(cancel_sender),
+            cancel_receiver: Some(cancel_receiver),
+        };
+
+        client.start(block_sender);
+
+        client
+    }
+
+    fn start(&mut self, block_sender: Sender<Block>) {
+        let zero_length = 8;
+
+        let data_receiver = self.data_receiver.take().unwrap();
+        let block_receiver = self.block_receiver.take().unwrap();
+        let cancel_receiver = self.cancel_receiver.take().unwrap();
+        let cancel_sender = self.cancel_sender.take().unwrap();
+
+        // miner
+        spawn_miner(
+            block_sender,
+            self.network.chain.clone(),
+            cancel_receiver,
+            data_receiver,
+            zero_length,
+        );
+
+        // network
+        self.network.spawn(
+            block_receiver,
+            cancel_sender,
+        );
     }
 }
