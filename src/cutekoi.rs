@@ -9,6 +9,7 @@ use sha2::{Digest, Sha256};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::thread::JoinHandle;
 use std::time::Duration;
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
@@ -176,4 +177,11 @@ mod test {
         let signature = sign_data(&data, &SigningKey::new(key.clone()));
         verify_data(&data, &signature, VerifyingKey::new(key.to_public_key()));
     }
+}
+
+pub struct Client {
+    pub id: usize,
+    pub network: UdpBroadcast,
+    pub miner_handle: JoinHandle<()>,
+    pub network_handle: JoinHandle<()>,
 }
