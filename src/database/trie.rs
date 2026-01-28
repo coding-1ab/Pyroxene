@@ -1,4 +1,4 @@
-//u8 but 
+//0<Nibble<0f
 pub type Nibble = u8;
 
 pub enum Node {
@@ -6,5 +6,8 @@ pub enum Node {
         nibble: Vec<Nibble>,
         child: Node
     }
-    
+    Branch{
+        children: [Node;16],
+
+    }
 }
