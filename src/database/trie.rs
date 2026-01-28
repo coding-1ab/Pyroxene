@@ -3,18 +3,19 @@ pub type Nibble = u8;
 
 fn byte_to_nibble(bytes:&[u8])->Vec<Nibble>{
     let ret:Vec<Nibble> = vec![];
-    for i in bytes{
-        
+    for _i in bytes{
+
     }
+    ret
 }
 
 pub enum Node {
     Extension{
         nibble: Vec<Nibble>,
-        child: Node
+        child: Box<Node>
     },
     Branch{
-        children: [Node;16],
+        children: [Box<Node>;16],
         value: u128
     },
     Leaf{

@@ -4,6 +4,7 @@ use crate::block::Address;
 
 
 #[derive(Archive,Serialize,Deserialize,Debug,Clone)]
+#[rkyv(derive(Debug))]
 pub struct Transaction{
     to: Address,
     from: Address,
