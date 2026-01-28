@@ -67,7 +67,7 @@ impl UdpBroadcast {
                         let data = &buffer.as_slice()[..length];
                         let new_block: Block = from_bytes::<Block, RkyvError>(data).unwrap();
                         let mut chain_access = chain.lock().unwrap();
-                        if chain_access.len() == new_block.block_header.id as usize {
+                        if chain_access.len() == new_block.block_header.height as usize {
                             chain_access.push(new_block);
                             println!("Received new block from source: {}", source);
                             println!("Chain: {}", chain_access.len());
@@ -97,7 +97,7 @@ impl UdpBroadcast {
         self.chain
             .lock()
             .unwrap()
-            .get(block.block_header.id as usize)
+            .get(block.block_header.height as usize)
             .is_some()
     }
 

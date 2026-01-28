@@ -1,6 +1,6 @@
 use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::block::Address;
+use crate::block::transaction::Transaction;
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
 pub struct BlockHeader {
@@ -8,11 +8,10 @@ pub struct BlockHeader {
     pub height: u64,
     pub nonce: u64,
     pub merkle_root: [u8; 32],
-    pub nonce_founder: Address
 }
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
 pub struct Block {
     pub block_header: BlockHeader,
-    pub txs: Vec<crate::cutekoi::Transaction>,
+    pub txs: Vec<Transaction>,
 }
