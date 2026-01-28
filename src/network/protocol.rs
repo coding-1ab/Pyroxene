@@ -123,6 +123,14 @@ impl ProtocolPacket {
     pub fn block_range_response(sender: Ipv4Addr, blocks: Vec<Block>) -> Self {
         Self::new(sender, PacketType::BlockRangeResponse { blocks })
     }
+
+    pub fn to_bytes(&self) -> Result<Vec<u8>, rkyv::rancor::Error> {
+        rkyv::to_bytes::<rkyv::rancor::Error>(self).map(|v| v.into_vec())
+    }
+
+    pub fn from_bytes(data: &[u8]) -> Result<Self, rkyv::rancor::Error> {
+        rkyv::from_bytes::<ProtocolPacket, rkyv::rancor::Error>(data)
+    }
 }
 
 impl ArchivedProtocolPacket {
@@ -186,5 +194,71 @@ mod tests {
         // 역직렬화
         let deserialized: Packet = rkyv::deserialize::<Packet, rkyv::rancor::Error>(archived).unwrap();
         assert_eq!(deserialized, packet);
+    }
+
+    #[test]
+    fn test_protocol_packet() {
+        let block_header = BlockHeader {
+            prev_hash: [0u8; 32],
+            height: 1,
+            nonce: 12345,
+            merkle_root: [1u8; 32],
+        };
+        let block = Block {
+            block_header,
+            txs: vec![],
+        };
+
+        let packet = ProtocolPacket::new_block(Ipv4Addr::new(192, 168, 1, 100), block.clone());
+
+        let bytes = packet.to_bytes().unwrap();
+        assert!(bytes.len() > 0);
+
+        let deserialized = ProtocolPacket::from_bytes(&bytes).unwrap();
+
+        assert_eq!(deserialized.sender(), Ipv4Addr::new(192, 168, 1, 100));
+        assert_eq!(deserialized.packet_type_id(), 0x01);
+
+        match deserialized.payload {
+            PacketType::NewBlock { block: recv_block } => {
+                assert_eq!(recv_block.block_header.height, 1);
+                assert_eq!(recv_block.block_header.nonce, 12345);
+            }
+            _ => panic!("Expected NewBlock packet type"),
+        }
+    }
+
+    #[test]
+    fn test_chain_length_req() {
+        let packet = ProtocolPacket::chain_length_request(Ipv4Addr::new(10, 0, 0, 1));
+
+        let bytes = packet.to_bytes().unwrap();
+        let deserialized = ProtocolPacket::from_bytes(&bytes).unwrap();
+
+        assert_eq!(deserialized.packet_type_id(), 0x02);
+        assert!(deserialized.is_broadcast());
+        assert!(!deserialized.is_response());
+    }
+
+    #[test]
+    fn test_block_range_req() {
+        let packet = ProtocolPacket::block_range_request(
+            Ipv4Addr::new(172, 16, 0, 1),
+            10,
+            20
+        );
+
+        let bytes = packet.to_bytes().unwrap();
+        let deserialized = ProtocolPacket::from_bytes(&bytes).unwrap();
+
+        assert_eq!(deserialized.packet_type_id(), 0x03);
+
+        match deserialized.payload {
+            PacketType::BlockRangeRequest { start_height, end_height } => {
+                assert_eq!(start_height, 10);
+                assert_eq!(end_height, 20);
+            }
+            _ => panic!("Expected BlockRangeRequest"),
+        }
     }
 }

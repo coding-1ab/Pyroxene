@@ -8,7 +8,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-mod protocol;
+pub mod protocol;
 
 pub const PORT: u16 = 1200;
 
@@ -48,7 +48,14 @@ impl UdpBroadcast {
                     let chain = self.chain.clone();
                     loop {
                         let new_block = receive_block.recv().unwrap();
-                        let bytes = to_bytes::<RkyvError>(&new_block).unwrap();
+
+                        let sender_ip = [0, 0, 0, 0];
+                        let packet = protocol::ProtocolPacket {
+                            sender_ip,
+                            payload: protocol::PacketType::NewBlock { block: new_block.clone() },
+                        };
+
+                        let bytes = to_bytes::<RkyvError>(&packet).unwrap();
                         let mut chain_access = chain.lock().unwrap();
                         chain_access.push(new_block);
                         println!("Sent new block");
@@ -65,16 +72,33 @@ impl UdpBroadcast {
                     loop {
                         let (length, source) = self.recv(buffer.as_mut_slice()).unwrap();
                         let data = &buffer.as_slice()[..length];
-                        let new_block: Block = from_bytes::<Block, RkyvError>(data).unwrap();
-                        let mut chain_access = chain.lock().unwrap();
-                        if chain_access.len() == new_block.block_header.height as usize {
-                            chain_access.push(new_block);
-                            println!("Received new block from source: {}", source);
-                            println!("Chain: {}", chain_access.len());
 
-                            notify_block.send(()).unwrap();
+                        let new_block = if let Ok(packet) = from_bytes::<protocol::ProtocolPacket, RkyvError>(data) {
+                            match packet.payload {
+                                protocol::PacketType::NewBlock { block } => Some(block),
+                                _ => {
+                                    println!("Received non-NewBlock packet type: 0x{:02x}, ignoring",
+                                        packet.packet_type_id());
+                                    None
+                                }
+                            }
+                        } else {
+                            from_bytes::<Block, RkyvError>(data).ok()
+                        };
+
+                        if let Some(new_block) = new_block {
+                            let mut chain_access = chain.lock().unwrap();
+                            if chain_access.len() == new_block.block_header.height as usize {
+                                chain_access.push(new_block);
+                                println!("Received new block from source: {}", source);
+                                println!("Chain: {}", chain_access.len());
+
+                                notify_block.send(()).unwrap();
+                            }
+                            drop(chain_access);
+                        } else {
+                            eprintln!("Failed to deserialize packet from {}", source);
                         }
-                        drop(chain_access);
                     }
                 });
             })
