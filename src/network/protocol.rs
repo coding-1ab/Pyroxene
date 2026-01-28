@@ -34,8 +34,8 @@ impl ArchivedPacket {
     }
 }
 
-#[derive(Archive, Deserialize, Serialize, Debug, PartialEq, Clone)]
-#[rkyv(compare(PartialEq), derive(Debug))]
+#[derive(Archive, Deserialize, Serialize, Debug, Clone)]
+#[rkyv(derive(Debug))]
 pub enum PacketType {
     NewBlock {
         block: Block,
@@ -57,8 +57,8 @@ pub enum PacketType {
     },
 }
 
-#[derive(Archive, Deserialize, Serialize, Debug, PartialEq, Clone)]
-#[rkyv(compare(PartialEq), derive(Debug))]
+#[derive(Archive, Deserialize, Serialize, Debug, Clone)]
+#[rkyv(derive(Debug))]
 pub struct ProtocolPacket {
     pub sender_ip: [u8; 4],
     pub payload: PacketType,
