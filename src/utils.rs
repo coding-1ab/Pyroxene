@@ -1,22 +1,16 @@
 use crate::block::block::{Block, BlockHeader};
-use rkyv::{Archive, Deserialize, Serialize, rancor::Error, to_bytes};
-use rsa::RsaPrivateKey;
+use crate::block::transaction::Transaction;
+use rkyv::{rancor::Error, to_bytes};
 use rsa::pkcs8::LineEnding;
 use rsa::pkcs8::{DecodePrivateKey, EncodePrivateKey};
 use rsa::pss::{Signature, SigningKey, VerifyingKey};
 use rsa::signature::{RandomizedSigner, Verifier};
+use rsa::RsaPrivateKey;
 use sha2::{Digest, Sha256};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::thread::JoinHandle;
 use std::time::Duration;
-
-#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
-pub struct Transaction {
-    pub sender: usize, // temporary value.
-    pub amount: u64,
-}
 
 pub fn generate_keys() -> RsaPrivateKey {
     let private_key = RsaPrivateKey::new(&mut rand::thread_rng(), 2048)
@@ -104,7 +98,7 @@ pub fn mine(
     let chain_access = chain.lock().unwrap();
     let prev_hash = chain_access.last().map(hash_block).unwrap_or([0u8; 32]);
     let merkle_root = merkle_root(&transactions);
-    let id = chain_access.len() as u64;
+    let height = chain_access.len() as u64;
     drop(chain_access);
 
     let mut block = Block {
@@ -113,7 +107,6 @@ pub fn mine(
             height,
             nonce: 0u64,
             merkle_root,
-            nonce_founder
         },
         txs: transactions.clone(),
     };
@@ -168,7 +161,7 @@ fn count_leading_zeros(bytes: [u8; 32]) -> u32 {
 
 #[cfg(test)]
 mod test {
-    use crate::cutekoi::{generate_keys, sign_data, verify_data};
+    use crate::utils::{generate_keys, sign_data, verify_data};
     use rsa::pss::{SigningKey, VerifyingKey};
 
     #[test]
@@ -178,11 +171,4 @@ mod test {
         let signature = sign_data(&data, &SigningKey::new(key.clone()));
         verify_data(&data, &signature, VerifyingKey::new(key.to_public_key()));
     }
-}
-
-pub struct Client {
-    pub id: usize,
-    pub network: UdpBroadcast,
-    pub miner_handle: JoinHandle<()>,
-    pub network_handle: JoinHandle<()>,
 }
