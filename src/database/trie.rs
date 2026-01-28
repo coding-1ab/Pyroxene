@@ -1,7 +1,10 @@
-pub struct Trie{
-    root: Node
-}
+//u8 but 
+pub type Nibble = u8;
 
-pub struct Node{
+pub enum Node {
+    Extension{
+        nibble: Vec<Nibble>,
+        child: Node
+    }
     
 }

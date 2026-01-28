@@ -8,7 +8,6 @@ pub struct BlockHeader {
     pub height: u64,
     pub nonce: u64,
     pub merkle_root: [u8; 32],
-    pub nonce_founder: Address
 }
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
