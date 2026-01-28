@@ -1,26 +1,13 @@
-//0<Nibble<0f
-pub type Nibble = u8;
+use crate::database::node::Node;
 
-fn byte_to_nibble(bytes:&[u8])->Vec<Nibble>{
-    let ret:Vec<Nibble> = vec![];
-    for _i in bytes{
-
-    }
-    ret
+pub struct Tree{
+    root: Node
 }
 
-pub enum Node {
-    Extension{
-        nibble: Vec<Nibble>,
-        child: Box<Node>
-    },
-    Branch{
-        children: [Box<Node>;16],
-        value: u128
-    },
-    Leaf{
-        key: [Nibble;64],
-        value: u128
+impl Tree{
+    pub fn insert(&mut self, leaf: Node) -> Self{
+        loop{
+            
+        }
     }
 }
-
