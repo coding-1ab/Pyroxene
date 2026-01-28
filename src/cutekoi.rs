@@ -110,9 +110,10 @@ pub fn mine(
     let mut block = Block {
         block_header: BlockHeader {
             prev_hash,
-            id,
+            height,
             nonce: 0u64,
             merkle_root,
+            nonce_founder
         },
         txs: transactions.clone(),
     };
