@@ -19,11 +19,11 @@ pub struct UdpBroadcast {
 }
 
 impl UdpBroadcast {
-    pub fn new() -> Result<Self> {
-        Self::with_port(PORT, PORT)
+    pub fn new(chain: Arc<Mutex<Vec<Block>>>) -> Result<Self> {
+        Self::with_port(PORT, PORT, chain)
     }
 
-    pub fn with_port(send: u16, receive: u16) -> Result<Self> {
+    pub fn with_port(send: u16, receive: u16, chain: Arc<Mutex<Vec<Block>>>) -> Result<Self> {
         let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
         socket.set_broadcast(true)?;
         socket.set_reuse_address(true)?;
@@ -36,7 +36,7 @@ impl UdpBroadcast {
         Ok(Self {
             socket,
             target: ([255, 255, 255, 255], send).into(), // 브로드캐스트 주소 바꿀 것
-            chain: Arc::new(Mutex::new(Vec::new())),
+            chain,
         })
     }
 
@@ -148,14 +148,16 @@ impl UdpBroadcast {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
     use crate::network::UdpBroadcast;
     use std::thread;
     use std::time::Duration;
 
     #[test]
     fn test_broadcast() {
-        let node1 = UdpBroadcast::new().unwrap();
-        let node2 = UdpBroadcast::new().unwrap();
+        let dummy_chain = Arc::new(Mutex::new(Vec::new()));
+        let node1 = UdpBroadcast::new(dummy_chain.clone()).unwrap();
+        let node2 = UdpBroadcast::new(dummy_chain.clone()).unwrap();
         let data: [u8; 4] = [0x43, 0x55, 0x54, 0x45];
         let mut receive_buffer = [0u8; 4];
 
@@ -183,13 +185,15 @@ mod tests {
 
     #[test]
     fn send() {
-        let node = UdpBroadcast::new().unwrap();
+        let chain = Arc::new(Mutex::new(Vec::new()));
+        let node = UdpBroadcast::new(chain).unwrap();
         node.send(&DATA).unwrap();
     }
 
     #[test]
     fn receive() {
-        let node = UdpBroadcast::new().unwrap();
+        let chain = Arc::new(Mutex::new(Vec::new()));
+        let node = UdpBroadcast::new(chain).unwrap();
         let mut buffer = [0u8; 64];
         let (length, sender) = node.recv(&mut buffer).unwrap();
         let received = &buffer[..length];

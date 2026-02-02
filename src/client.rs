@@ -7,6 +7,7 @@ use rand::random;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::{io, thread};
 use std::io::BufRead;
+use std::sync::{Arc, Mutex};
 use std::thread::spawn;
 use rsa::RsaPrivateKey;
 
@@ -22,6 +23,7 @@ pub struct Client{
     cancel_receiver: Receiver<()>,
     stdin_sender: Sender<String>,
     stdin_receiver: Receiver<String>,
+    chain: Arc<Mutex<Vec<Block>>>
 }
 
 impl Client{
@@ -31,10 +33,11 @@ impl Client{
         let (cancel_sender, cancel_receiver) = channel::<()>();
         let (stdin_sender, stdin_receiver) = channel();
         let id: usize = random();
+        let chain = Arc::new(Mutex::new(Vec::new()));
 
         println!("Client ID: {}", id);
 
-        let network = UdpBroadcast::new().unwrap();
+        let network = UdpBroadcast::new(chain.clone()).unwrap();
         let private_key = generate_keys();
 
         Self {
@@ -49,12 +52,13 @@ impl Client{
             cancel_receiver,
             stdin_sender,
             stdin_receiver,
+            chain,
         }
     }
 
     pub fn start(self) {
         let zero_length = 8;
-        spawn_stdin(self.stdin_sender);
+        spawn_stdin(self.stdin_sender, self.chain);
         // miner
         spawn_miner(
             self.block_sender,
@@ -71,7 +75,7 @@ impl Client{
         );
     }
 }
-pub fn spawn_stdin(tx: Sender<String>) {
+pub fn spawn_stdin(tx: Sender<String>, chain: Arc<Mutex<Vec<Block>>>) {
     thread::spawn(move || {
         let stdin = io::stdin();
         for line in stdin.lock().lines() {
