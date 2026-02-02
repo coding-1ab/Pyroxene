@@ -2,6 +2,37 @@ use rkyv::{Archive, Deserialize, Serialize};
 use std::net::Ipv4Addr;
 use crate::block::block::Block;
 
+#[derive(Debug)]
+pub enum ProtocolError {
+    PacketTooShort { expected: usize, actual: usize },
+    UnknownPacketId(u8),
+    PayloadTooShort { packet_type: &'static str, expected: usize, actual: usize },
+    RkyvError(rkyv::rancor::Error),
+}
+
+impl std::fmt::Display for ProtocolError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::PacketTooShort { expected, actual } =>
+                write!(f, "Packet too short: expected at least {} bytes, got {}", expected, actual),
+            Self::UnknownPacketId(id) =>
+                write!(f, "Unknown packet ID: 0x{:02x}", id),
+            Self::PayloadTooShort { packet_type, expected, actual } =>
+                write!(f, "{}: expected {} bytes, got {}", packet_type, expected, actual),
+            Self::RkyvError(e) =>
+                write!(f, "rkyv error: {}", e),
+        }
+    }
+}
+
+impl std::error::Error for ProtocolError {}
+
+impl From<rkyv::rancor::Error> for ProtocolError {
+    fn from(e: rkyv::rancor::Error) -> Self {
+        Self::RkyvError(e)
+    }
+}
+
 #[derive(Archive, Deserialize, Serialize, Debug, PartialEq, Clone)]
 #[rkyv(
     compare(PartialEq),
@@ -124,12 +155,128 @@ impl ProtocolPacket {
         Self::new(sender, PacketType::BlockRangeResponse { blocks })
     }
 
-    pub fn to_bytes(&self) -> Result<Vec<u8>, rkyv::rancor::Error> {
-        rkyv::to_bytes::<rkyv::rancor::Error>(self).map(|v| v.into_vec())
+    pub fn to_bytes(&self) -> Result<Vec<u8>, ProtocolError> {
+        let mut bytes = Vec::new();
+
+        // 패킷 타입 1byte
+        bytes.push(self.packet_type_id());
+
+        // 발신자 IP 4bytes
+        bytes.extend_from_slice(&self.sender_ip);
+
+        // 페이로드 ..지맘대로
+        match &self.payload {
+            PacketType::NewBlock { block } => {
+                let block_bytes = rkyv::to_bytes::<rkyv::rancor::Error>(block)?;
+                bytes.extend_from_slice(&block_bytes);
+            }
+            PacketType::ChainLengthRequest => {
+                // 페이로드가 없다!
+            }
+            PacketType::BlockRangeRequest { start_height, end_height } => {
+                bytes.extend_from_slice(&start_height.to_le_bytes());
+                bytes.extend_from_slice(&end_height.to_le_bytes());
+            }
+            PacketType::ChainLengthResponse { chain_length } => {
+                bytes.extend_from_slice(&chain_length.to_le_bytes());
+            }
+            PacketType::BlockRangeResponse { blocks } => {
+                // 블록 개수 (4 바이트)
+                bytes.extend_from_slice(&(blocks.len() as u32).to_le_bytes());
+                // [길이: 4 바이트] [블록: 지맘대로]
+                for block in blocks {
+                    let block_bytes = rkyv::to_bytes::<rkyv::rancor::Error>(block)?;
+                    bytes.extend_from_slice(&(block_bytes.len() as u32).to_le_bytes());
+                    bytes.extend_from_slice(&block_bytes);
+                }
+            }
+        }
+
+        Ok(bytes)
     }
 
-    pub fn from_bytes(data: &[u8]) -> Result<Self, rkyv::rancor::Error> {
-        rkyv::from_bytes::<ProtocolPacket, rkyv::rancor::Error>(data)
+    pub fn from_bytes(data: &[u8]) -> Result<Self, ProtocolError> {
+        if data.len() < 5 {
+            return Err(ProtocolError::PacketTooShort { expected: 5, actual: data.len() });
+        }
+
+        let packet_id = data[0];
+        let sender_ip: [u8; 4] = data[1..5].try_into().unwrap();
+        let payload_data = &data[5..];
+
+        let payload = match packet_id {
+            0x01 => {
+                let mut aligned: rkyv::util::AlignedVec = rkyv::util::AlignedVec::new();
+                aligned.extend_from_slice(payload_data);
+                let block = rkyv::from_bytes::<Block, rkyv::rancor::Error>(&aligned)?;
+                PacketType::NewBlock { block }
+            }
+            0x02 => PacketType::ChainLengthRequest,
+            0x03 => {
+                if payload_data.len() < 16 {
+                    return Err(ProtocolError::PayloadTooShort {
+                        packet_type: "BlockRangeRequest",
+                        expected: 16,
+                        actual: payload_data.len(),
+                    });
+                }
+                let start_height = u64::from_le_bytes(payload_data[0..8].try_into().unwrap());
+                let end_height = u64::from_le_bytes(payload_data[8..16].try_into().unwrap());
+                PacketType::BlockRangeRequest { start_height, end_height }
+            }
+            0x04 => {
+                if payload_data.len() < 8 {
+                    return Err(ProtocolError::PayloadTooShort {
+                        packet_type: "ChainLengthResponse",
+                        expected: 8,
+                        actual: payload_data.len(),
+                    });
+                }
+                let chain_length = u64::from_le_bytes(payload_data[0..8].try_into().unwrap());
+                PacketType::ChainLengthResponse { chain_length }
+            }
+            0x05 => {
+                if payload_data.len() < 4 {
+                    return Err(ProtocolError::PayloadTooShort {
+                        packet_type: "BlockRangeResponse",
+                        expected: 4,
+                        actual: payload_data.len(),
+                    });
+                }
+                let block_count = u32::from_le_bytes(payload_data[0..4].try_into().unwrap()) as usize;
+                let mut blocks = Vec::with_capacity(block_count);
+                let mut offset = 4;
+                for _ in 0..block_count {
+                    if payload_data.len() < offset + 4 {
+                        return Err(ProtocolError::PayloadTooShort {
+                            packet_type: "BlockRangeResponse block length",
+                            expected: offset + 4,
+                            actual: payload_data.len(),
+                        });
+                    }
+                    let block_len = u32::from_le_bytes(
+                        payload_data[offset..offset + 4].try_into().unwrap()
+                    ) as usize;
+                    offset += 4;
+                    if payload_data.len() < offset + block_len {
+                        return Err(ProtocolError::PayloadTooShort {
+                            packet_type: "BlockRangeResponse block data",
+                            expected: offset + block_len,
+                            actual: payload_data.len(),
+                        });
+                    }
+                    let mut aligned: rkyv::util::AlignedVec = rkyv::util::AlignedVec::new();
+                    aligned.extend_from_slice(&payload_data[offset..offset + block_len]);
+                    let block = rkyv::from_bytes::<Block, rkyv::rancor::Error>(&aligned)?;
+                    blocks.push(block);
+                    offset += block_len;
+                }
+                PacketType::BlockRangeResponse { blocks }
+            }
+            _ => return Err(ProtocolError::UnknownPacketId(packet_id)),
+        };
+
+        Ok(ProtocolPacket { sender_ip, payload })
     }
 }
 

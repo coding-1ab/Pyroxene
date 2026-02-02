@@ -1,6 +1,6 @@
 use crate::block::block::Block;
 use rkyv::rancor::Error as RkyvError;
-use rkyv::{from_bytes, to_bytes};
+use rkyv::from_bytes;
 use socket2::{Domain, Protocol, Socket, Type};
 use std::io::Result;
 use std::net::{SocketAddr, UdpSocket};
@@ -55,7 +55,7 @@ impl UdpBroadcast {
                             payload: protocol::PacketType::NewBlock { block: new_block.clone() },
                         };
 
-                        let bytes = to_bytes::<RkyvError>(&packet).unwrap();
+                        let bytes = packet.to_bytes().unwrap();
                         let mut chain_access = chain.lock().unwrap();
                         chain_access.push(new_block);
                         println!("Sent new block");
@@ -73,7 +73,7 @@ impl UdpBroadcast {
                         let (length, source) = self.recv(buffer.as_mut_slice()).unwrap();
                         let data = &buffer.as_slice()[..length];
 
-                        let new_block = if let Ok(packet) = from_bytes::<protocol::ProtocolPacket, RkyvError>(data) {
+                        let new_block = if let Ok(packet) = protocol::ProtocolPacket::from_bytes(data) {
                             match packet.payload {
                                 protocol::PacketType::NewBlock { block } => Some(block),
                                 _ => {
