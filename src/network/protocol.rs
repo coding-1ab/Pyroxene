@@ -197,6 +197,27 @@ mod tests {
     }
 
     #[test]
+    fn test_size() {
+        let packet1 = ProtocolPacket {
+            sender_ip: [0,0,0,0],
+            payload: PacketType::ChainLengthRequest,
+        };
+
+        let packet2 = ProtocolPacket {
+            sender_ip: [0,0,0,0],
+            payload: PacketType::BlockRangeRequest {
+                start_height: 0,
+                end_height: 0,
+            },
+        };
+
+        let bytes1 = packet1.to_bytes().unwrap();
+        let bytes2 = packet2.to_bytes().unwrap();
+
+        assert_ne!(bytes1.len(), bytes2.len())
+    }
+
+    #[test]
     fn test_protocol_packet() {
         let block_header = BlockHeader {
             prev_hash: [0u8; 32],
