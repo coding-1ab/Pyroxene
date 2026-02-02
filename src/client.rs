@@ -9,6 +9,7 @@ use std::{io, thread};
 use std::io::BufRead;
 use std::sync::{Arc, Mutex};
 use std::thread::spawn;
+use std::time::Duration;
 use rsa::RsaPrivateKey;
 
 pub struct Client{
@@ -58,7 +59,8 @@ impl Client{
 
     pub fn start(self) {
         let zero_length = 8;
-        spawn_stdin(self.stdin_sender, self.chain);
+        spawn_stdin(self.stdin_sender);
+        spawn_chain_watcher(self.chain);
         // miner
         spawn_miner(
             self.block_sender,
@@ -75,7 +77,7 @@ impl Client{
         );
     }
 }
-pub fn spawn_stdin(tx: Sender<String>, chain: Arc<Mutex<Vec<Block>>>) {
+pub fn spawn_stdin(tx: Sender<String>) {
     thread::spawn(move || {
         let stdin = io::stdin();
         for line in stdin.lock().lines() {
@@ -87,6 +89,43 @@ pub fn spawn_stdin(tx: Sender<String>, chain: Arc<Mutex<Vec<Block>>>) {
                 }
                 Err(_) => break,
             }
+        }
+    });
+}
+
+fn spawn_chain_watcher(chain: Arc<Mutex<Vec<Block>>>) {
+    thread::spawn(move || {
+        let mut last_len = 0usize;
+
+        loop {
+            {
+                let chain_guard = chain.lock().unwrap();
+                let current_len = chain_guard.len();
+
+                if current_len > last_len {
+                    let new_blocks = current_len - last_len;
+
+                    println!(
+                        "\n🧱 Chain updated! {} new block(s). total = {}\n",
+                        new_blocks,
+                        current_len
+                    );
+
+                    // 마지막 블록 정보도 보고 싶으면
+                    if let Some(block) = chain_guard.last() {
+                        println!(
+                            "  height: {}\n  txs: {}\n",
+                            block.block_header.height,
+                            block.txs.len()
+                        );
+                    }
+
+                    last_len = current_len;
+                }
+            }
+
+            // 너무 자주 lock 안 걸리게
+            thread::sleep(Duration::from_millis(300));
         }
     });
 }
