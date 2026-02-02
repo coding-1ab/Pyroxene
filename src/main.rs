@@ -6,7 +6,8 @@ mod client;
 
 use client::Client;
 fn main() {
-    let _client = Client::new();
+    let client = Client::new();
+    client.start();
     loop {
         std::thread::park();
     }
