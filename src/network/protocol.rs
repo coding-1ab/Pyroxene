@@ -297,7 +297,7 @@ mod tests {
         let node2 = UdpBroadcast::with_port(1201, 1201, chain2).unwrap();
 
         // 보낼 패킷
-        let packet = ProtocolPacket::new(Ipv4Addr::new(192, 168, 0, 100));
+        let packet = ProtocolPacket::new(Ipv4Addr::new(192, 168, 0, 100), PacketType::ChainLengthRequest);
 
         let serialized = rkyv::to_bytes::<rkyv::rancor::Error>(&packet).unwrap();
 
