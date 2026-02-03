@@ -62,8 +62,7 @@ pub enum PacketType {
     BlockRangeResponse { blocks: Vec<Block> },
 }
 
-#[derive(Archive, Deserialize, Serialize, Debug, Clone, PartialEq)]
-#[rkyv(derive(Debug))]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ProtocolPacket {
     pub sender_ip: [u8; 4],
     pub payload: PacketType,
@@ -268,17 +267,6 @@ impl ProtocolPacket {
     }
 }
 
-impl ArchivedProtocolPacket {
-    pub fn sender(&self) -> Ipv4Addr {
-        Ipv4Addr::new(
-            self.sender_ip[0],
-            self.sender_ip[1],
-            self.sender_ip[2],
-            self.sender_ip[3],
-        )
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -299,7 +287,7 @@ mod tests {
         // 보낼 패킷
         let packet = ProtocolPacket::new(Ipv4Addr::new(192, 168, 0, 100), PacketType::ChainLengthRequest);
 
-        let serialized = rkyv::to_bytes::<rkyv::rancor::Error>(&packet).unwrap();
+        let serialized = packet.to_bytes().unwrap();
 
         let mut receive_buffer = [0u8; 1024]; // 1KB 버퍼 재사용
 
@@ -321,10 +309,9 @@ mod tests {
 
         let (received_size, _sender_addr) = receiver;
 
-        let valid_data = &receive_buffer[..received_size];
+        let received = &receive_buffer[..received_size];
 
-        let deserialized =
-            rkyv::from_bytes::<ProtocolPacket, rkyv::rancor::Error>(valid_data).unwrap();
+        let deserialized = ProtocolPacket::from_bytes(received).unwrap();
 
         // 역직렬화
         assert_eq!(deserialized, packet);
