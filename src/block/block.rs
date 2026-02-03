@@ -4,7 +4,7 @@ use chrono::Utc;
 use crate::block::transaction::Transaction;
 use crate::block::Address;
 
-#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
+#[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[rkyv(derive(Debug))]
 pub struct BlockHeader {
     pub prev_hash: [u8; 32],
@@ -15,7 +15,7 @@ pub struct BlockHeader {
     pub timestamp: i64
 }
 
-#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
+#[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[rkyv(derive(Debug))]
 pub struct Block {
     pub block_header: BlockHeader,

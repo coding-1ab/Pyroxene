@@ -3,7 +3,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 use crate::block::Address;
 use chrono::Utc;
 
-#[derive(Archive,Serialize,Deserialize,Debug,Clone)]
+#[derive(Archive,Serialize,Deserialize,Debug,Clone, PartialEq)]
 #[rkyv(derive(Debug))]
 pub struct Transaction{
     to: Address,
