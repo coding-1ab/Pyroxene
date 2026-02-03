@@ -507,7 +507,7 @@ mod tests {
     fn test_byte_layout() {
         let ip = Ipv4Addr::new(192, 168, 1, 100);
 
-        // (packet, expected id)
+            // 패킷 및 예상ID
         let packets: Vec<(ProtocolPacket, u8)> = vec![
             (ProtocolPacket::new_block(ip, Block {
                 block_header: BlockHeader {
@@ -529,10 +529,8 @@ mod tests {
         for (packet, expected_id) in &packets {
             let bytes = packet.to_bytes().unwrap();
 
-            // first byte: packet type id
             assert_eq!(bytes[0], *expected_id);
 
-            // bytes 1..5: sender ip
             assert_eq!(&bytes[1..5], &[192, 168, 1, 100]);
         }
     }
@@ -563,7 +561,6 @@ mod tests {
             .map(|p| p.to_bytes().unwrap().len())
             .collect();
 
-        // every packet type should produce a different byte length
         for i in 0..sizes.len() {
             for j in (i + 1)..sizes.len() {
                 assert_ne!(sizes[i], sizes[j],
