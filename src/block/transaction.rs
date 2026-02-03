@@ -18,15 +18,15 @@ impl Transaction{
     pub fn new(
         to: Address,
         from: Address,
-        val: u128,
-        verfier: Address,
+        value: u128,
+        verifier: Address,
     ) -> Transaction{
         Transaction{
-            to: to,
-            from: from,
-            value: val,
+            to,
+            from,
+            value,
             nonce: 0,
-            verifier: verfier,
+            verifier,
             timestamp: Utc::now().timestamp()
         }
     }
