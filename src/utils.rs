@@ -107,6 +107,8 @@ pub fn mine(
             height,
             nonce: 0u64,
             merkle_root,
+            difficulty: 1.0,
+            timestamp: chrono::Utc::now().timestamp(),
         },
         txs: transactions.clone(),
     };
