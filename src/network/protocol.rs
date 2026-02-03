@@ -1,26 +1,41 @@
+use crate::block::block::Block;
 use rkyv::{Archive, Deserialize, Serialize};
 use std::net::Ipv4Addr;
-use crate::block::block::Block;
 
 #[derive(Debug)]
 pub enum ProtocolError {
-    PacketTooShort { expected: usize, actual: usize },
+    PacketTooShort {
+        expected: usize,
+        actual: usize,
+    },
     UnknownPacketId(u8),
-    PayloadTooShort { packet_type: &'static str, expected: usize, actual: usize },
+    PayloadTooShort {
+        packet_type: &'static str,
+        expected: usize,
+        actual: usize,
+    },
     RkyvError(rkyv::rancor::Error),
 }
 
 impl std::fmt::Display for ProtocolError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::PacketTooShort { expected, actual } =>
-                write!(f, "Packet too short: expected at least {} bytes, got {}", expected, actual),
-            Self::UnknownPacketId(id) =>
-                write!(f, "Unknown packet ID: 0x{:02x}", id),
-            Self::PayloadTooShort { packet_type, expected, actual } =>
-                write!(f, "{}: expected {} bytes, got {}", packet_type, expected, actual),
-            Self::RkyvError(e) =>
-                write!(f, "rkyv error: {}", e),
+            Self::PacketTooShort { expected, actual } => write!(
+                f,
+                "Packet too short: expected at least {} bytes, got {}",
+                expected, actual
+            ),
+            Self::UnknownPacketId(id) => write!(f, "Unknown packet ID: 0x{:02x}", id),
+            Self::PayloadTooShort {
+                packet_type,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "{}: expected {} bytes, got {}",
+                packet_type, expected, actual
+            ),
+            Self::RkyvError(e) => write!(f, "rkyv error: {}", e),
         }
     }
 }
@@ -33,62 +48,21 @@ impl From<rkyv::rancor::Error> for ProtocolError {
     }
 }
 
-#[derive(Archive, Deserialize, Serialize, Debug, PartialEq, Clone)]
-#[rkyv(
-    compare(PartialEq),
-    derive(Debug),
-)]
-pub struct Packet {
-    pub sender_ip: [u8; 4],
-}
-
-impl Packet {
-    pub fn new(sender: Ipv4Addr) -> Self {
-        Self {
-            sender_ip: sender.octets(),
-        }
-    }
-
-    pub fn sender(&self) -> Ipv4Addr {
-        Ipv4Addr::from(self.sender_ip)
-    }
-}
-
-impl ArchivedPacket {
-    pub fn sender(&self) -> Ipv4Addr {
-        Ipv4Addr::new(
-            self.sender_ip[0],
-            self.sender_ip[1],
-            self.sender_ip[2],
-            self.sender_ip[3],
-        )
-    }
-}
-
-#[derive(Archive, Deserialize, Serialize, Debug, Clone)]
+#[derive(Archive, Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[rkyv(derive(Debug))]
 pub enum PacketType {
-    NewBlock {
-        block: Block,
-    },
+    NewBlock { block: Block },
 
     ChainLengthRequest,
 
-    BlockRangeRequest {
-        start_height: u64,
-        end_height: u64,
-    },
+    BlockRangeRequest { start_height: u64, end_height: u64 },
 
-    ChainLengthResponse {
-        chain_length: u64,
-    },
+    ChainLengthResponse { chain_length: u64 },
 
-    BlockRangeResponse {
-        blocks: Vec<Block>,
-    },
+    BlockRangeResponse { blocks: Vec<Block> },
 }
 
-#[derive(Archive, Deserialize, Serialize, Debug, Clone)]
+#[derive(Archive, Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[rkyv(derive(Debug))]
 pub struct ProtocolPacket {
     pub sender_ip: [u8; 4],
@@ -129,11 +103,9 @@ impl ProtocolPacket {
     pub fn is_response(&self) -> bool {
         matches!(
             self.payload,
-            PacketType::ChainLengthResponse { .. }
-                | PacketType::BlockRangeResponse { .. }
+            PacketType::ChainLengthResponse { .. } | PacketType::BlockRangeResponse { .. }
         )
     }
-
 
     pub fn new_block(sender: Ipv4Addr, block: Block) -> Self {
         Self::new(sender, PacketType::NewBlock { block })
@@ -144,7 +116,13 @@ impl ProtocolPacket {
     }
 
     pub fn block_range_request(sender: Ipv4Addr, start_height: u64, end_height: u64) -> Self {
-        Self::new(sender, PacketType::BlockRangeRequest { start_height, end_height })
+        Self::new(
+            sender,
+            PacketType::BlockRangeRequest {
+                start_height,
+                end_height,
+            },
+        )
     }
 
     pub fn chain_length_response(sender: Ipv4Addr, chain_length: u64) -> Self {
@@ -173,7 +151,10 @@ impl ProtocolPacket {
             PacketType::ChainLengthRequest => {
                 // 페이로드가 없다!
             }
-            PacketType::BlockRangeRequest { start_height, end_height } => {
+            PacketType::BlockRangeRequest {
+                start_height,
+                end_height,
+            } => {
                 bytes.extend_from_slice(&start_height.to_le_bytes());
                 bytes.extend_from_slice(&end_height.to_le_bytes());
             }
@@ -197,7 +178,10 @@ impl ProtocolPacket {
 
     pub fn from_bytes(data: &[u8]) -> Result<Self, ProtocolError> {
         if data.len() < 5 {
-            return Err(ProtocolError::PacketTooShort { expected: 5, actual: data.len() });
+            return Err(ProtocolError::PacketTooShort {
+                expected: 5,
+                actual: data.len(),
+            });
         }
 
         let packet_id = data[0];
@@ -222,7 +206,10 @@ impl ProtocolPacket {
                 }
                 let start_height = u64::from_le_bytes(payload_data[0..8].try_into().unwrap());
                 let end_height = u64::from_le_bytes(payload_data[8..16].try_into().unwrap());
-                PacketType::BlockRangeRequest { start_height, end_height }
+                PacketType::BlockRangeRequest {
+                    start_height,
+                    end_height,
+                }
             }
             0x04 => {
                 if payload_data.len() < 8 {
@@ -243,7 +230,8 @@ impl ProtocolPacket {
                         actual: payload_data.len(),
                     });
                 }
-                let block_count = u32::from_le_bytes(payload_data[0..4].try_into().unwrap()) as usize;
+                let block_count =
+                    u32::from_le_bytes(payload_data[0..4].try_into().unwrap()) as usize;
                 let mut blocks = Vec::with_capacity(block_count);
                 let mut offset = 4;
                 for _ in 0..block_count {
@@ -254,9 +242,9 @@ impl ProtocolPacket {
                             actual: payload_data.len(),
                         });
                     }
-                    let block_len = u32::from_le_bytes(
-                        payload_data[offset..offset + 4].try_into().unwrap()
-                    ) as usize;
+                    let block_len =
+                        u32::from_le_bytes(payload_data[offset..offset + 4].try_into().unwrap())
+                            as usize;
                     offset += 4;
                     if payload_data.len() < offset + block_len {
                         return Err(ProtocolError::PayloadTooShort {
@@ -309,52 +297,48 @@ mod tests {
         let node2 = UdpBroadcast::with_port(1201, 1201, chain2).unwrap();
 
         // 보낼 패킷
-        let packet = Packet::new(Ipv4Addr::new(192, 168, 0, 100));
+        let packet = ProtocolPacket::new(Ipv4Addr::new(192, 168, 0, 100));
 
         let serialized = rkyv::to_bytes::<rkyv::rancor::Error>(&packet).unwrap();
 
         let mut receive_buffer = [0u8; 1024]; // 1KB 버퍼 재사용
 
         let receiver = thread::scope(|scope| {
-            let result = scope.spawn(|| {
+            let receiver = scope.spawn(|| {
                 thread::sleep(Duration::from_millis(100));
                 let (size, addr) = node2.recv(&mut receive_buffer).unwrap();
                 (size, addr)
             });
 
-            scope.spawn(|| {
+            let sender = scope.spawn(|| {
                 thread::sleep(Duration::from_millis(50));
                 node1.send(&serialized).unwrap();
             });
 
-            result.join().unwrap()
+            sender.join().unwrap();
+            receiver.join().unwrap()
         });
 
         let (received_size, _sender_addr) = receiver;
 
-
         let valid_data = &receive_buffer[..received_size];
 
-
-        let archived = rkyv::access::<ArchivedPacket, rkyv::rancor::Error>(valid_data).unwrap();
-
-        assert_eq!(archived.sender(), packet.sender());
-        assert_eq!(archived.sender(), Ipv4Addr::new(192, 168, 0, 100));
+        let deserialized =
+            rkyv::from_bytes::<ProtocolPacket, rkyv::rancor::Error>(valid_data).unwrap();
 
         // 역직렬화
-        let deserialized: Packet = rkyv::deserialize::<Packet, rkyv::rancor::Error>(archived).unwrap();
         assert_eq!(deserialized, packet);
     }
 
     #[test]
     fn test_size() {
         let packet1 = ProtocolPacket {
-            sender_ip: [0,0,0,0],
+            sender_ip: [0, 0, 0, 0],
             payload: PacketType::ChainLengthRequest,
         };
 
         let packet2 = ProtocolPacket {
-            sender_ip: [0,0,0,0],
+            sender_ip: [0, 0, 0, 0],
             payload: PacketType::BlockRangeRequest {
                 start_height: 0,
                 end_height: 0,
@@ -415,11 +399,7 @@ mod tests {
 
     #[test]
     fn test_block_range_req() {
-        let packet = ProtocolPacket::block_range_request(
-            Ipv4Addr::new(172, 16, 0, 1),
-            10,
-            20
-        );
+        let packet = ProtocolPacket::block_range_request(Ipv4Addr::new(172, 16, 0, 1), 10, 20);
 
         let bytes = packet.to_bytes().unwrap();
         let deserialized = ProtocolPacket::from_bytes(&bytes).unwrap();
@@ -427,7 +407,10 @@ mod tests {
         assert_eq!(deserialized.packet_type_id(), 0x03);
 
         match deserialized.payload {
-            PacketType::BlockRangeRequest { start_height, end_height } => {
+            PacketType::BlockRangeRequest {
+                start_height,
+                end_height,
+            } => {
                 assert_eq!(start_height, 10);
                 assert_eq!(end_height, 20);
             }
@@ -437,10 +420,7 @@ mod tests {
 
     #[test]
     fn test_chain_length_response() {
-        let packet = ProtocolPacket::chain_length_response(
-            Ipv4Addr::new(10, 0, 0, 1),
-            42
-        );
+        let packet = ProtocolPacket::chain_length_response(Ipv4Addr::new(10, 0, 0, 1), 42);
 
         let bytes = packet.to_bytes().unwrap();
         let deserialized = ProtocolPacket::from_bytes(&bytes).unwrap();
@@ -484,7 +464,7 @@ mod tests {
 
         let packet = ProtocolPacket::block_range_response(
             Ipv4Addr::new(172, 16, 0, 1),
-            vec![block1, block2]
+            vec![block1, block2],
         );
 
         let bytes = packet.to_bytes().unwrap();
@@ -509,17 +489,23 @@ mod tests {
 
             // 패킷 및 예상ID
         let packets: Vec<(ProtocolPacket, u8)> = vec![
-            (ProtocolPacket::new_block(ip, Block {
-                block_header: BlockHeader {
-                    prev_hash: [0u8; 32],
-                    height: 0,
-                    nonce: 0,
-                    merkle_root: [0u8; 32],
-                    difficulty: 1.0,
-                    timestamp: 0,
-                },
-                txs: vec![],
-            }), 0x01),
+            (
+                ProtocolPacket::new_block(
+                    ip,
+                    Block {
+                        block_header: BlockHeader {
+                            prev_hash: [0u8; 32],
+                            height: 0,
+                            nonce: 0,
+                            merkle_root: [0u8; 32],
+                            difficulty: 1.0,
+                            timestamp: 0,
+                        },
+                        txs: vec![],
+                    },
+                ),
+                0x01,
+            ),
             (ProtocolPacket::chain_length_request(ip), 0x02),
             (ProtocolPacket::block_range_request(ip, 0, 10), 0x03),
             (ProtocolPacket::chain_length_response(ip, 100), 0x04),
@@ -540,30 +526,35 @@ mod tests {
         let ip = Ipv4Addr::new(0, 0, 0, 0);
 
         let packets = vec![
-            ProtocolPacket::new_block(ip, Block {
-                block_header: BlockHeader {
-                    prev_hash: [0u8; 32],
-                    height: 0,
-                    nonce: 0,
-                    merkle_root: [0u8; 32],
-                    difficulty: 1.0,
-                    timestamp: 0,
+            ProtocolPacket::new_block(
+                ip,
+                Block {
+                    block_header: BlockHeader {
+                        prev_hash: [0u8; 32],
+                        height: 0,
+                        nonce: 0,
+                        merkle_root: [0u8; 32],
+                        difficulty: 1.0,
+                        timestamp: 0,
+                    },
+                    txs: vec![],
                 },
-                txs: vec![],
-            }),
+            ),
             ProtocolPacket::chain_length_request(ip),
             ProtocolPacket::block_range_request(ip, 0, 0),
             ProtocolPacket::chain_length_response(ip, 0),
             ProtocolPacket::block_range_response(ip, vec![]),
         ];
 
-        let sizes: Vec<usize> = packets.iter()
+        let sizes: Vec<usize> = packets
+            .iter()
             .map(|p| p.to_bytes().unwrap().len())
             .collect();
 
         for i in 0..sizes.len() {
             for j in (i + 1)..sizes.len() {
-                assert_ne!(sizes[i], sizes[j],
+                assert_ne!(
+                    sizes[i], sizes[j],
                     "packet {} and {} have the same byte length: {}",
                     i, j, sizes[i]
                 );
