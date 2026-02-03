@@ -516,9 +516,11 @@ mod tests {
 
         let chain_len_req = ProtocolPacket::chain_length_request(ip);
         let chain_len_req_bytes = chain_len_req.to_bytes().unwrap();
+        assert_eq!(ProtocolPacket::from_bytes(chain_len_req_bytes.as_slice()).unwrap(), chain_len_req);
 
         let block_range_req = ProtocolPacket::block_range_request(ip, 0, 100);
         let block_range_req_bytes = block_range_req.to_bytes().unwrap();
+        assert_eq!(ProtocolPacket::from_bytes(block_range_req_bytes.as_slice()).unwrap(), block_range_req);
 
         let empty_block = Block {
             block_header: BlockHeader {
@@ -533,6 +535,7 @@ mod tests {
         };
         let new_block_empty = ProtocolPacket::new_block(ip, empty_block);
         let new_block_empty_bytes = new_block_empty.to_bytes().unwrap();
+        assert_eq!(ProtocolPacket::from_bytes(new_block_empty_bytes.as_slice()).unwrap(), new_block_empty);
 
         let block_with_tx = Block {
             block_header: BlockHeader {
@@ -547,6 +550,7 @@ mod tests {
         };
         let new_block_with_tx = ProtocolPacket::new_block(ip, block_with_tx);
         let new_block_with_tx_bytes = new_block_with_tx.to_bytes().unwrap();
+        assert_eq!(ProtocolPacket::from_bytes(new_block_with_tx_bytes.as_slice()).unwrap(), new_block_with_tx);
 
         assert_eq!(chain_len_req_bytes.len(), 5, "ChainLengthRequest: 5 bytes (1 type + 4 IP)");
         assert_eq!(block_range_req_bytes.len(), 21, "BlockRangeRequest: 21 bytes (5 header + 16 data)");
