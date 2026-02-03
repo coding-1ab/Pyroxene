@@ -509,6 +509,69 @@ mod tests {
     }
 
     #[test]
+    fn test_broadcast_packet_size_ordering() {
+        use crate::block::transaction::Transaction;
+
+        let ip = Ipv4Addr::new(192, 168, 1, 1);
+
+        let chain_len_req = ProtocolPacket::chain_length_request(ip);
+        let chain_len_req_bytes = chain_len_req.to_bytes().unwrap();
+
+        let block_range_req = ProtocolPacket::block_range_request(ip, 0, 100);
+        let block_range_req_bytes = block_range_req.to_bytes().unwrap();
+
+        let empty_block = Block {
+            block_header: BlockHeader {
+                prev_hash: [0u8; 32],
+                height: 1,
+                nonce: 42,
+                merkle_root: [0u8; 32],
+                difficulty: 1.0,
+                timestamp: 1000,
+            },
+            txs: vec![],
+        };
+        let new_block_empty = ProtocolPacket::new_block(ip, empty_block);
+        let new_block_empty_bytes = new_block_empty.to_bytes().unwrap();
+
+        let block_with_tx = Block {
+            block_header: BlockHeader {
+                prev_hash: [0u8; 32],
+                height: 2,
+                nonce: 99,
+                merkle_root: [0u8; 32],
+                difficulty: 1.0,
+                timestamp: 2000,
+            },
+            txs: vec![Transaction::new([1u8; 32], [2u8; 32], 100, [3u8; 32])],
+        };
+        let new_block_with_tx = ProtocolPacket::new_block(ip, block_with_tx);
+        let new_block_with_tx_bytes = new_block_with_tx.to_bytes().unwrap();
+
+        assert_eq!(chain_len_req_bytes.len(), 5, "ChainLengthRequest: 5 bytes (1 type + 4 IP)");
+        assert_eq!(block_range_req_bytes.len(), 21, "BlockRangeRequest: 21 bytes (5 header + 16 data)");
+
+        assert!(
+            chain_len_req_bytes.len() < block_range_req_bytes.len(),
+            "ChainLengthRequest ({} B) < BlockRangeRequest ({} B)",
+            chain_len_req_bytes.len(),
+            block_range_req_bytes.len(),
+        );
+        assert!(
+            block_range_req_bytes.len() < new_block_empty_bytes.len(),
+            "BlockRangeRequest ({} B) < NewBlock empty ({} B)",
+            block_range_req_bytes.len(),
+            new_block_empty_bytes.len(),
+        );
+        assert!(
+            new_block_empty_bytes.len() < new_block_with_tx_bytes.len(),
+            "NewBlock empty ({} B) < NewBlock with tx ({} B)",
+            new_block_empty_bytes.len(),
+            new_block_with_tx_bytes.len(),
+        );
+    }
+
+    #[test]
     fn test_all_sizes_differ() {
         let ip = Ipv4Addr::new(0, 0, 0, 0);
 
