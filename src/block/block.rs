@@ -1,3 +1,5 @@
+use std::sync::{Arc,Mutex};
+
 use rkyv::{Archive, Deserialize, Serialize};
 use chrono::Utc;
 
@@ -30,5 +32,14 @@ impl Block{
         }else {
             self.txs.push(tx);
         }
+    }
+    pub fn set_difficulty(&mut self, chain: Arc<Mutex<Vec<Block>>>){
+        let chain_access = chain.lock().unwrap();
+        let [.., a, b] = chain_access.as_slice() else {
+            todo!()
+        };
+        let current_difficulty = b.block_header.difficulty;
+        let mining_time = b.block_header.timestamp - a.block_header.timestamp;
+        self.block_header.difficulty = current_difficulty / (720000000.0 * mining_time as f32);
     }
 }
