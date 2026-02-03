@@ -297,13 +297,16 @@ mod tests {
     use crate::block::block::{Block, BlockHeader};
     use crate::network::UdpBroadcast;
     use std::net::Ipv4Addr;
+    use std::sync::{Arc, Mutex};
     use std::thread;
     use std::time::Duration;
 
     #[test]
     fn test_packet_broadcast() {
-        let node1 = UdpBroadcast::with_port(1201, 1201).unwrap();
-        let node2 = UdpBroadcast::with_port(1201, 1201).unwrap();
+        let chain1 = Arc::new(Mutex::new(Vec::<Block>::new()));
+        let chain2 = Arc::new(Mutex::new(Vec::<Block>::new()));
+        let node1 = UdpBroadcast::with_port(1201, 1201, chain1).unwrap();
+        let node2 = UdpBroadcast::with_port(1201, 1201, chain2).unwrap();
 
         // 보낼 패킷
         let packet = Packet::new(Ipv4Addr::new(192, 168, 0, 100));
@@ -371,6 +374,8 @@ mod tests {
             height: 1,
             nonce: 12345,
             merkle_root: [1u8; 32],
+            difficulty: 1.0,
+            timestamp: 1000,
         };
         let block = Block {
             block_header,
@@ -427,6 +432,145 @@ mod tests {
                 assert_eq!(end_height, 20);
             }
             _ => panic!("Expected BlockRangeRequest"),
+        }
+    }
+
+    #[test]
+    fn test_chain_length_response() {
+        let packet = ProtocolPacket::chain_length_response(
+            Ipv4Addr::new(10, 0, 0, 1),
+            42
+        );
+
+        let bytes = packet.to_bytes().unwrap();
+        let deserialized = ProtocolPacket::from_bytes(&bytes).unwrap();
+
+        assert_eq!(deserialized.packet_type_id(), 0x04);
+        assert!(deserialized.is_response());
+        assert!(!deserialized.is_broadcast());
+
+        match deserialized.payload {
+            PacketType::ChainLengthResponse { chain_length } => {
+                assert_eq!(chain_length, 42);
+            }
+            _ => panic!("Expected ChainLengthResponse"),
+        }
+    }
+
+    #[test]
+    fn test_block_range_response() {
+        let block1 = Block {
+            block_header: BlockHeader {
+                prev_hash: [0u8; 32],
+                height: 1,
+                nonce: 100,
+                merkle_root: [1u8; 32],
+                difficulty: 1.0,
+                timestamp: 1000,
+            },
+            txs: vec![],
+        };
+        let block2 = Block {
+            block_header: BlockHeader {
+                prev_hash: [2u8; 32],
+                height: 2,
+                nonce: 200,
+                merkle_root: [3u8; 32],
+                difficulty: 2.0,
+                timestamp: 2000,
+            },
+            txs: vec![],
+        };
+
+        let packet = ProtocolPacket::block_range_response(
+            Ipv4Addr::new(172, 16, 0, 1),
+            vec![block1, block2]
+        );
+
+        let bytes = packet.to_bytes().unwrap();
+        let deserialized = ProtocolPacket::from_bytes(&bytes).unwrap();
+
+        assert_eq!(deserialized.packet_type_id(), 0x05);
+        assert!(deserialized.is_response());
+
+        match deserialized.payload {
+            PacketType::BlockRangeResponse { blocks } => {
+                assert_eq!(blocks.len(), 2);
+                assert_eq!(blocks[0].block_header.height, 1);
+                assert_eq!(blocks[1].block_header.height, 2);
+            }
+            _ => panic!("Expected BlockRangeResponse"),
+        }
+    }
+
+    #[test]
+    fn test_byte_layout() {
+        let ip = Ipv4Addr::new(192, 168, 1, 100);
+
+        // (packet, expected id)
+        let packets: Vec<(ProtocolPacket, u8)> = vec![
+            (ProtocolPacket::new_block(ip, Block {
+                block_header: BlockHeader {
+                    prev_hash: [0u8; 32],
+                    height: 0,
+                    nonce: 0,
+                    merkle_root: [0u8; 32],
+                    difficulty: 1.0,
+                    timestamp: 0,
+                },
+                txs: vec![],
+            }), 0x01),
+            (ProtocolPacket::chain_length_request(ip), 0x02),
+            (ProtocolPacket::block_range_request(ip, 0, 10), 0x03),
+            (ProtocolPacket::chain_length_response(ip, 100), 0x04),
+            (ProtocolPacket::block_range_response(ip, vec![]), 0x05),
+        ];
+
+        for (packet, expected_id) in &packets {
+            let bytes = packet.to_bytes().unwrap();
+
+            // first byte: packet type id
+            assert_eq!(bytes[0], *expected_id);
+
+            // bytes 1..5: sender ip
+            assert_eq!(&bytes[1..5], &[192, 168, 1, 100]);
+        }
+    }
+
+    #[test]
+    fn test_all_sizes_differ() {
+        let ip = Ipv4Addr::new(0, 0, 0, 0);
+
+        let packets = vec![
+            ProtocolPacket::new_block(ip, Block {
+                block_header: BlockHeader {
+                    prev_hash: [0u8; 32],
+                    height: 0,
+                    nonce: 0,
+                    merkle_root: [0u8; 32],
+                    difficulty: 1.0,
+                    timestamp: 0,
+                },
+                txs: vec![],
+            }),
+            ProtocolPacket::chain_length_request(ip),
+            ProtocolPacket::block_range_request(ip, 0, 0),
+            ProtocolPacket::chain_length_response(ip, 0),
+            ProtocolPacket::block_range_response(ip, vec![]),
+        ];
+
+        let sizes: Vec<usize> = packets.iter()
+            .map(|p| p.to_bytes().unwrap().len())
+            .collect();
+
+        // every packet type should produce a different byte length
+        for i in 0..sizes.len() {
+            for j in (i + 1)..sizes.len() {
+                assert_ne!(sizes[i], sizes[j],
+                    "packet {} and {} have the same byte length: {}",
+                    i, j, sizes[i]
+                );
+            }
         }
     }
 }
