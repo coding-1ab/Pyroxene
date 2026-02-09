@@ -8,7 +8,6 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::{io, thread};
 use std::io::BufRead;
 use std::sync::{Arc, Mutex};
-use std::thread::spawn;
 use std::time::Duration;
 use rsa::RsaPrivateKey;
 use crate::block::Address;
@@ -67,11 +66,10 @@ impl Client{
 
         spawn_stdin(self.stdin_sender);
         spawn_chain_watcher(self.chain.clone());
-
         // miner
         spawn_miner(
-            self.block_sender.clone(),
-            self.network.chain.clone(),
+            self.block_sender,
+            self.chain.clone(),
             self.cancel_receiver,
             self.data_receiver,
             zero_length,

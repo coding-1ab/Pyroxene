@@ -11,6 +11,7 @@ use std::thread;
 pub mod protocol;
 
 pub const PORT: u16 = 1200;
+const BUFFER_SIZE: usize = 4096;
 
 pub struct UdpBroadcast {
     socket: UdpSocket,
@@ -67,7 +68,7 @@ impl UdpBroadcast {
 
                 scope.spawn(|| {
                     let notify_block = notify_block;
-                    let mut buffer = Box::new([0u8; 4096]);
+                    let mut buffer = Box::new([0u8; BUFFER_SIZE]);
                     let chain = self.chain.clone();
                     loop {
                         let (length, source) = self.recv(buffer.as_mut_slice()).unwrap();
@@ -130,7 +131,7 @@ impl UdpBroadcast {
     }
 
     pub fn receive_and_rebroadcast(&self) -> Result<()> {
-        let mut buffer = vec![0u8; 65536];
+        let mut buffer = vec![0u8; BUFFER_SIZE];
         let (size, _addr) = self.recv(&mut buffer)?;
         let received_data = &buffer[..size];
         let block: Block = from_bytes::<Block, RkyvError>(received_data).unwrap();

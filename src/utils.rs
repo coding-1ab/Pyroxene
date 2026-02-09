@@ -120,13 +120,12 @@ pub fn mine(
             return None;
         }
 
-        block.block_header.nonce += 1;
-
         let hash = hash_block(&block);
 
         if count_leading_zeros(hash) as usize == zero_length {
             return Some(block);
         }
+        block.block_header.nonce += 1;
     }
 }
 
@@ -143,6 +142,7 @@ pub fn spawn_miner(
             loop {
                 if let Some(block) = mine(&to_send, chain.clone(), &cancel_rx, zero_length) {
                     block_tx.send(block).unwrap();
+                    break;
                 }
             }
         }
@@ -171,6 +171,6 @@ mod test {
         let data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10u8];
         let key = generate_keys();
         let signature = sign_data(&data, &SigningKey::new(key.clone()));
-        verify_data(&data, &signature, VerifyingKey::new(key.to_public_key()));
+        assert!(verify_data(&data, &signature, VerifyingKey::new(key.to_public_key())));
     }
 }
