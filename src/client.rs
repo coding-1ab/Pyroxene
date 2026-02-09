@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::spawn;
 use std::time::Duration;
 use rsa::RsaPrivateKey;
+use crate::block::Address;
 
 pub struct Client{
     pub id: usize,
@@ -59,11 +60,17 @@ impl Client{
 
     pub fn start(self) {
         let zero_length = 8;
+
+        let mut my_address: Address = [0u8; 32];
+        let id_bytes = self.id.to_be_bytes();
+        my_address[..id_bytes.len()].copy_from_slice(&id_bytes);
+
         spawn_stdin(self.stdin_sender);
-        spawn_chain_watcher(self.chain);
+        spawn_chain_watcher(self.chain.clone());
+
         // miner
         spawn_miner(
-            self.block_sender,
+            self.block_sender.clone(),
             self.network.chain.clone(),
             self.cancel_receiver,
             self.data_receiver,
@@ -75,8 +82,97 @@ impl Client{
             self.block_receiver,
             self.cancel_sender,
         );
+
+        let mut pending_transactions: Vec<Transaction> = Vec::new();
+        println!("Welcome to Pyroxene!");
+        println!("\n=== Blockchain Client ID: {} ===", self.id);
+        println!("내 주소(Hex): {}", hex::encode(my_address));
+        println!("명령어:");
+        println!("  chain               - 현재 체인 상태 보기");
+        println!("  add <address> <data>    - 트랜잭션 추가");
+        println!("  mine                - 모인 트랜잭션으로 채굴 시작");
+        println!("  status              - 현재 대기 중인 트랜잭션 확인");
+        println!("  exit                - 종료");
+        println!("================================\n");
+
+        while let Ok(line) = self.stdin_receiver.recv() {
+            let parts: Vec<&str> = line.trim().splitn(2, ' ').collect();
+            let command = parts[0];
+
+            match command {
+                "chain" => {
+                    let chain = self.chain.lock().unwrap();
+                    println!("Current chain(Count: {})", chain.len());
+                    for block in chain.iter(){
+                        println!("Block #{} - Txs: {} (Timestamp: {})", block.block_header.height, block.txs.len(), block.block_header.timestamp);
+                    }
+                }
+
+                "add" => {
+                    if parts.len() < 3 {
+                        println!("잘못된 사용법입니다.\n사용법: add <address> <data>");
+                        continue;
+                    }
+
+                    let to_res = parse_address(parts[1]);
+                    let value_res = parts[2].parse::<u128>();
+
+                    match (to_res, value_res) {
+                        (Ok(to), Ok(value)) => {
+                            let tx = Transaction::new(to, my_address, value);
+                            pending_transactions.push(tx);
+                            println!("추가됨: [To: ..{}, Value: {}] (대기열: {}개)", hex::encode(&to[..4]), value, pending_transactions.len());
+                        }
+                        (Err(e), _) => println!("주소 오류: {}", e),
+                        (_, Err(_)) => println!("금액은 숫자여야 합니다."),
+                    }
+                }
+
+                "mine" => {
+                    if pending_transactions.is_empty(){
+                        println!("채굴할 트랜잭션이 없습니다. `add` 를 비롯한 타 명령어를 먼저 써주세요.");
+                    }
+                    else{
+                        let count = pending_transactions.len();
+                        let txs_to_send = std::mem::take(&mut pending_transactions);
+
+                        if self.data_sender.send(txs_to_send).is_ok() {
+                            println!("{}개의 트랜잭션을 마이너에게 전달했습니다. 채굴을 시작합니다.", count);
+                        }
+                        else {
+                            println!("마이너에게 전달을 실패했습니다. 무슨 오류인지는 모르겠습니다? 아하하..");
+                        }
+                    }
+                }
+
+                "status" => {
+                    println!("현재 대기열: {}개", pending_transactions.len());
+                    for (i, tx) in pending_transactions.iter().enumerate() {
+                        println!("  {}. Value: {}", i + 1, tx.nonce);
+                    }
+                }
+
+                "exit" => break,
+                _ => println!("알 수 없는 명령어: [chain, add, mine, status, exit]만을 써주세요."),
+            }
+        }
+
     }
 }
+
+fn parse_address(s: &str) -> Result<[u8; 32], String> {
+    let s = s.strip_prefix("0x").unwrap_or(s);
+
+    let mut bytes = [0u8; 32];
+    let decoded = hex::decode(s).map_err(|_| "Invalid Hex string")?;
+
+    if decoded.len() > 32 {
+        return Err("Address too long (max 32 bytes)".to_string());
+    }
+    bytes[..decoded.len()].copy_from_slice(&decoded);
+    Ok(bytes)
+}
+
 pub fn spawn_stdin(tx: Sender<String>) {
     thread::spawn(move || {
         let stdin = io::stdin();
