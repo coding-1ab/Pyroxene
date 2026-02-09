@@ -8,7 +8,7 @@ use chrono::Utc;
 pub struct Transaction{
     to: Address,
     from: Address,
-    value: u128,
+    pub value: u128,
     pub nonce: u64,
     timestamp: i64,
 }

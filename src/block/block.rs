@@ -1,7 +1,6 @@
 use std::sync::{Arc,Mutex};
 
 use rkyv::{Archive, Deserialize, Serialize};
-use chrono::Utc;
 
 use crate::block::transaction::Transaction;
 use crate::block::Address;

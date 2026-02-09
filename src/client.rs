@@ -9,6 +9,7 @@ use std::{io, thread};
 use std::io::BufRead;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use chrono::{Local, TimeZone};
 use rsa::RsaPrivateKey;
 use crate::block::Address;
 
@@ -102,7 +103,8 @@ impl Client{
                     let chain = self.chain.lock().unwrap();
                     println!("Current chain(Count: {})", chain.len());
                     for block in chain.iter(){
-                        println!("Block #{} - Txs: {} (Timestamp: {})", block.block_header.height, block.txs.len(), block.block_header.timestamp);
+                        let timestamp = Local.timestamp_opt(block.block_header.timestamp, 0).unwrap();
+                        println!("Block #{} - Txs: {} (Timestamp: {})", block.block_header.height, block.txs.len(), timestamp);
                     }
                 }
 
@@ -146,7 +148,7 @@ impl Client{
                 "status" => {
                     println!("현재 대기열: {}개", pending_transactions.len());
                     for (i, tx) in pending_transactions.iter().enumerate() {
-                        println!("  {}. Value: {}", i + 1, tx.nonce);
+                        println!("  {}. Value: {}", i + 1, tx.value);
                     }
                 }
 
