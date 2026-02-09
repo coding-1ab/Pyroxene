@@ -94,7 +94,7 @@ impl Client{
         println!("================================\n");
 
         while let Ok(line) = self.stdin_receiver.recv() {
-            let parts: Vec<&str> = line.trim().splitn(2, ' ').collect();
+            let parts: Vec<&str> = line.trim().splitn(3, ' ').collect();
             let command = parts[0];
 
             match command {
