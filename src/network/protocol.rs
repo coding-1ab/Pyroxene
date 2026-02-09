@@ -546,7 +546,7 @@ mod tests {
                 difficulty: 1.0,
                 timestamp: 2000,
             },
-            txs: vec![Transaction::new([1u8; 32], [2u8; 32], 100, [3u8; 32])],
+            txs: vec![Transaction::new([1u8; 32], [2u8; 32], 100)],
         };
         let new_block_with_tx = ProtocolPacket::new_block(ip, block_with_tx);
         let new_block_with_tx_bytes = new_block_with_tx.to_bytes().unwrap();

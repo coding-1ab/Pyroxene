@@ -10,7 +10,6 @@ pub struct Transaction{
     from: Address,
     value: u128,
     pub nonce: u64,
-    pub verifier: Address,
     timestamp: i64,
 }
 
@@ -19,14 +18,12 @@ impl Transaction{
         to: Address,
         from: Address,
         value: u128,
-        verifier: Address,
     ) -> Transaction{
         Transaction{
             to,
             from,
             value,
             nonce: 0,
-            verifier,
             timestamp: Utc::now().timestamp()
         }
     }

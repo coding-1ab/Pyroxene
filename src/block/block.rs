@@ -26,7 +26,7 @@ pub struct Block {
 
 impl Block{
     pub fn coinbase(&mut self,to: Address){
-        let tx = Transaction::new(to,[0;32], 120, [0;32]);
+        let tx = Transaction::new(to,[0;32], 120);
         if self.txs.len() != 0 {
             panic!("coinbase fuction requires empty block");
         }else {
