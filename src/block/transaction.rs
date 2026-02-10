@@ -6,11 +6,11 @@ use chrono::Utc;
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[rkyv(derive(Debug))]
 pub struct Transaction{
-    to: Address,
-    from: Address,
+    pub to: Address,
+    pub from: Address,
     pub value: u128,
     pub nonce: u64,
-    timestamp: i64,
+    pub timestamp: i64,
 }
 
 impl Transaction{

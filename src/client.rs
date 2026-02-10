@@ -121,7 +121,7 @@ impl Client{
                         (Ok(to), Ok(value)) => {
                             let tx = Transaction::new(to, my_address, value);
                             pending_transactions.push(tx);
-                            println!("추가됨: [To: ..{}, Value: {}] (대기열: {}개)", hex::encode(&to[..4]), value, pending_transactions.len());
+                            println!("추가됨: [To: {}..., Value: {}] (대기열: {}개)", hex::encode(&to[..4]), value, pending_transactions.len());
                         }
                         (Err(e), _) => println!("주소 오류: {}", e),
                         (_, Err(_)) => println!("금액은 숫자여야 합니다."),
@@ -148,7 +148,7 @@ impl Client{
                 "status" => {
                     println!("현재 대기열: {}개", pending_transactions.len());
                     for (i, tx) in pending_transactions.iter().enumerate() {
-                        println!("  {}. Value: {}", i + 1, tx.value);
+                        println!("  {}. To: {}... | Value: {}", i + 1, hex::encode(&tx.to[..4]) ,tx.value);
                     }
                 }
 
